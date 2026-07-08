@@ -1,0 +1,20 @@
+#wp-admin-bar-upsun-environment .upsun-env-badge {
+	display: inline-block;
+	padding: 0 8px;
+	border-radius: 3px;
+	font-weight: 600;
+	color: #fff;
+	background: #50575e; /* unknown */
+}
+
+#wp-admin-bar-upsun-environment .upsun-env-production {
+	background: #00753b;
+}
+
+#wp-admin-bar-upsun-environment .upsun-env-staging {
+	background: #b45309;
+}
+
+#wp-admin-bar-upsun-environment .upsun-env-development {
+	background: #6d28d9;
+}

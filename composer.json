@@ -1,0 +1,44 @@
+{
+  "name": "upsun/wordpress-mu-plugin",
+  "description": "Must-use plugin integrating WordPress with the Upsun platform: environment awareness, router-cache friendliness, read-only filesystem UX, Site Health checks, and a wp upsun CLI command.",
+  "type": "wordpress-muplugin",
+  "version": "0.1.0",
+  "license": "MIT",
+  "homepage": "https://upsun.com",
+  "keywords": [
+    "wordpress",
+    "upsun",
+    "platformsh",
+    "mu-plugin"
+  ],
+  "require": {
+    "php": ">=8.1"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^10.5"
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Upsun\\": "src/"
+    },
+    "files": [
+      "src/helpers.php"
+    ]
+  },
+  "extra": {
+    "installer-name": "upsun"
+  },
+  "archive": {
+    "exclude": [
+      "/vendor",
+      "/tests",
+      "/composer.lock",
+      "/phpunit.xml.dist",
+      "/.phpunit.cache",
+      "/.gitignore"
+    ]
+  },
+  "scripts": {
+    "test": "phpunit"
+  }
+}
