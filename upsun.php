@@ -15,7 +15,7 @@ if ( defined( 'UPSUN_MU_PLUGIN_DIR' ) ) {
 }
 
 define( 'UPSUN_MU_PLUGIN_DIR', __DIR__ );
-define( 'UPSUN_MU_PLUGIN_VERSION', '0.2.1' );
+define( 'UPSUN_MU_PLUGIN_VERSION', '0.2.2' );
 
 require_once __DIR__ . '/src/Environment.php';
 require_once __DIR__ . '/src/helpers.php';
@@ -29,6 +29,7 @@ require_once __DIR__ . '/src/Modules/PreviewProtection.php';
 require_once __DIR__ . '/src/Modules/Smtp.php';
 require_once __DIR__ . '/src/Modules/Dashboard.php';
 require_once __DIR__ . '/src/Modules/CronHeartbeat.php';
+require_once __DIR__ . '/src/Modules/SafePreviews.php';
 
 // The CLI command exists even off-platform so `wp upsun info` can report
 // "Not running on Upsun" instead of erroring in local/CI environments.

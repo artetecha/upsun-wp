@@ -1,14 +1,14 @@
 # Roadmap
 
-## Status (2026-07-08)
+## Status (2026-07-10)
 
 | Milestone | Item | Status |
 |---|---|---|
 | v0.2 | Upsun dashboard page (`dashboard` module) | ✅ shipped in 0.2.0 (PR #44), verified on a preview env |
 | v0.2 | Cron heartbeat (`cron-heartbeat` module) | ✅ shipped in 0.2.1 (PR #45), `wp upsun doctor` verified live |
 | v0.2 | Login-screen environment banner | ✅ shipped in 0.2.1 (PR #45), verified on a preview env |
-| v0.2 | SafePreviews module + `wp upsun sanitize` | ⬜ next up |
-| v0.2 | `wp upsun cache-check <url>` | ⬜ not started |
+| v0.2 | SafePreviews module + `wp upsun sanitize` | 🔄 implemented in 0.2.2; preview-env verification pending |
+| v0.2 | `wp upsun cache-check <url>` | ⬜ next up |
 | v0.3 | Compat layer, `wp upsun migrate`, relationship health, mount usage | ⬜ not started |
 | — | Extraction to an independent repo | ⬜ triggered by second consumer or v0.3 |
 
@@ -49,9 +49,9 @@ make the router cache debuggable, and give the plugin a home inside wp-admin.
 ### Upsun dashboard page (`dashboard` module) — shipped in 0.2.0
 
 A top-level **"Upsun"** entry in the wp-admin sidebar (`add_menu_page`,
-`manage_options`, slug `upsun`; `dashicons-cloud` until an official Upsun logo
-asset is added), following the WP Engine/Kinsta pattern of a platform home
-inside wp-admin. This becomes the surface that all other features plug into,
+`manage_options`, slug `upsun`; since 0.2.2 positioned directly below
+Dashboard with the official Upsun mark as a repaintable base64-SVG icon),
+following the WP Engine/Kinsta pattern of a platform home inside wp-admin. This becomes the surface that all other features plug into,
 instead of each growing its own UI.
 
 - **Panel registry**: modules contribute panels via an
@@ -85,7 +85,7 @@ form), and the flush-object-cache action. The Caching panel's interactive
 cache-check form and the SafePreviews sanitize action land with their
 features below.
 
-### SafePreviews module (`safe-previews`)
+### SafePreviews module (`safe-previews`) — implemented in 0.2.2
 
 The flagship. Upsun previews are byte-for-byte clones of production — including
 live payment keys, webhook URLs, and CRM credentials. This module neuters
@@ -101,17 +101,24 @@ outbound integrations on non-production environments:
   writes so behavior applies always and leaves the cloned data untouched.
 - **Outbound webhooks**: pause WooCommerce webhooks deliveries on previews
   (runtime short-circuit, not status mutation, if achievable).
-- **Site hook**: fire `upsun_preview_sanitize` action on first boot in a fresh
-  clone so consumer code can scrub/adjust its own integrations.
+- **Site hook**: fire `upsun_preview_sanitize` action when a fresh clone or
+  data sync is sanitized, so consumer code can scrub/adjust its own
+  integrations.
 - **Fresh-clone detection**: store the environment name in an option
   (`upsun_environment_stamp`); a mismatch between stored and current env means
-  "this database was just cloned from elsewhere" — that's the trigger for
-  one-time sanitize actions. (The clone carries the parent's stamp, which is
-  exactly what makes the mismatch detectable.)
+  "this database was just cloned/synced from elsewhere". (The clone carries
+  the parent's stamp, which is exactly what makes the mismatch detectable —
+  no runtime `PLATFORM_*` variable exposes parent env or data-sync time.)
+- **Trigger**: `wp upsun sanitize --if-needed` in the **post_deploy hook** —
+  the only hook that runs on every redeploy including data syncs, and safe on
+  all environments (production refreshes the stamp, sanitized previews no-op).
+  A per-request boot check exists as an opt-in fallback
+  (`upsun_safe_previews_boot_check`, default off); the preview_safety check
+  warns when neither has run for the current data.
 - **Opt-outs**: `UPSUN_DISABLE_SAFE_PREVIEWS`, per-concern filters. A real
   staging domain that must send mail can allow-list itself.
-- **CLI**: `wp upsun sanitize [--dry-run]` to run the sanitize actions on
-  demand (deploy-hook friendly).
+- **CLI**: `wp upsun sanitize [--if-needed] [--dry-run]` to run the sanitize
+  actions on demand.
 
 Design constraint: KEDS's e2e suite currently forbids POSTs against previews
 because Stripe/FluentCRM are live there. Success criterion: with SafePreviews
@@ -155,6 +162,33 @@ in; this protects them at the door. Opt out via `upsun_login_banner`.
 ## v0.3 — Fleet features
 
 For adoption beyond the first customer.
+
+### Built-in sanitizers (opt-in, disabled by default)
+
+SafePreviews' `upsun_preview_sanitize` hook currently fires into consumer
+code only; the built-in protections are runtime filters that never write to
+the database. This adds a registry of *DB-writing* sanitizers that run as
+part of the sanitize flow — each shipped **disabled** and enabled per-slug
+via filter (code-based config, no toggle UI; 0.x semver forbids changing
+default behavior). Writes are safe by platform design: data only flows
+parent→child on Upsun, so scrubbed preview state can never leak back, and a
+resync re-triggers sanitize.
+
+Launch candidates (each idempotent, dry-run aware, reporting what changed
+through `wp upsun sanitize`, the dashboard panel, and doctor):
+
+- **`anonymize-user-emails`** — rewrite user emails to a per-user `.invalid`
+  address. Defense-in-depth beyond mail interception: no plugin can reach a
+  real customer through any send path. The most-reinvented preview sanitizer
+  in every hosting workflow.
+- **`deactivate-plugins`** — deactivate a consumer-supplied list of plugin
+  slugs on previews (backup runners, analytics, gateways with no runtime
+  test-mode switch). Would replace KEDS's LearnPress-Stripe gateway-removal
+  shim with declarative config.
+- **`scrub-options`** — null/overwrite a consumer-supplied list of option
+  names or array sub-keys. The generic escape hatch for plugins that read
+  credentials in ways runtime filters cannot reach (the LearnPress
+  settings-cache problem, generalized).
 
 ### Read-only-FS compat layer
 

@@ -2,7 +2,7 @@
   "name": "upsun/wordpress-mu-plugin",
   "description": "Must-use plugin integrating WordPress with the Upsun platform: environment awareness, router-cache friendliness, read-only filesystem UX, Site Health checks, and a wp upsun CLI command.",
   "type": "wordpress-muplugin",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "license": "MIT",
   "homepage": "https://upsun.com",
   "keywords": [

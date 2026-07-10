@@ -13,6 +13,7 @@ final class ModuleRegistry {
 		'smtp'                  => Modules\Smtp::class,
 		'dashboard'             => Modules\Dashboard::class,
 		'cron-heartbeat'        => Modules\CronHeartbeat::class,
+		'safe-previews'         => Modules\SafePreviews::class,
 	);
 
 	/**

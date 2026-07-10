@@ -9,13 +9,18 @@ if ( PHP_SAPI !== 'cli' ) {
 	exit; // Test harness only; never run via the web server.
 }
 
+// Intercept-mail logging must not pollute the PHPUnit output stream.
+ini_set( 'error_log', sys_get_temp_dir() . '/upsun-mu-plugin-tests.log' );
+
 // Minimal hook system: enough for apply_filters/add_filter round-trips.
 $GLOBALS['upsun_test_filters'] = array();
 $GLOBALS['upsun_test_actions'] = array();
+$GLOBALS['upsun_test_fired']   = array();
 
 function upsun_test_reset_hooks(): void {
 	$GLOBALS['upsun_test_filters'] = array();
 	$GLOBALS['upsun_test_actions'] = array();
+	$GLOBALS['upsun_test_fired']   = array();
 }
 
 function add_filter( $hook, $callback, $priority = 10, $accepted_args = 1 ) {
@@ -33,6 +38,18 @@ function apply_filters( $hook, $value, ...$args ) {
 		$value = $callback( $value, ...$args );
 	}
 	return $value;
+}
+
+function do_action( $hook, ...$args ) {
+	$GLOBALS['upsun_test_fired'][ $hook ][] = $args;
+
+	foreach ( $GLOBALS['upsun_test_actions'][ $hook ] ?? array() as $callback ) {
+		$callback( ...$args );
+	}
+}
+
+function has_action( $hook, $callback = false ) {
+	return ! empty( $GLOBALS['upsun_test_actions'][ $hook ] );
 }
 
 function __return_true() {
@@ -162,6 +179,7 @@ require_once dirname( __DIR__ ) . '/src/Modules/PreviewProtection.php';
 require_once dirname( __DIR__ ) . '/src/Modules/Smtp.php';
 require_once dirname( __DIR__ ) . '/src/Modules/Dashboard.php';
 require_once dirname( __DIR__ ) . '/src/Modules/CronHeartbeat.php';
+require_once dirname( __DIR__ ) . '/src/Modules/SafePreviews.php';
 
 /**
  * Unset every PLATFORM_* variable a test may have set, and clear caches.
