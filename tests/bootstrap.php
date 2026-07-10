@@ -43,6 +43,72 @@ function __return_false() {
 	return false;
 }
 
+// Admin/rendering stubs, enough to smoke-render the dashboard page.
+define( 'WP_CONTENT_DIR', sys_get_temp_dir() );
+
+function __( $text, $domain = null ) {
+	return $text;
+}
+
+function esc_html__( $text, $domain = null ) {
+	return $text;
+}
+
+function esc_html( $text ) {
+	return (string) $text;
+}
+
+function esc_attr( $text ) {
+	return (string) $text;
+}
+
+function esc_url( $url ) {
+	return (string) $url;
+}
+
+function current_user_can( $capability ) {
+	return true;
+}
+
+function is_admin() {
+	return false;
+}
+
+function is_user_logged_in() {
+	return false;
+}
+
+function admin_url( $path = '' ) {
+	return 'http://example.test/wp-admin/' . ltrim( (string) $path, '/' );
+}
+
+function sanitize_key( $key ) {
+	return strtolower( preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $key ) ) );
+}
+
+function wp_nonce_field( ...$args ) {
+	echo '<input type="hidden" name="_wpnonce" value="test">';
+}
+
+function wp_using_ext_object_cache() {
+	return false;
+}
+
+function get_option( $name, $default_value = false ) {
+	return 1;
+}
+
+function wp_upload_dir() {
+	return array(
+		'basedir' => sys_get_temp_dir(),
+		'error'   => false,
+	);
+}
+
+function wp_is_writable( $path ) {
+	return is_writable( (string) $path );
+}
+
 require_once dirname( __DIR__ ) . '/src/Environment.php';
 require_once dirname( __DIR__ ) . '/src/helpers.php';
 require_once dirname( __DIR__ ) . '/src/Module.php';
@@ -53,6 +119,7 @@ require_once dirname( __DIR__ ) . '/src/Modules/UpdatesPolicy.php';
 require_once dirname( __DIR__ ) . '/src/Modules/SiteHealth.php';
 require_once dirname( __DIR__ ) . '/src/Modules/PreviewProtection.php';
 require_once dirname( __DIR__ ) . '/src/Modules/Smtp.php';
+require_once dirname( __DIR__ ) . '/src/Modules/Dashboard.php';
 
 /**
  * Unset every PLATFORM_* variable a test may have set, and clear caches.

@@ -1,0 +1,214 @@
+# Roadmap
+
+This package is a **generic platform plugin for WordPress on Upsun** — not a KEDS
+component. KEDS is the first customer: it consumes the plugin through the public
+filter/constant API only, and anything KEDS-specific lives in the consuming repo
+(`keds/mu-plugins/keds-upsun-config.php`), never in here. The package is designed
+to be extracted to its own repository and published on Packagist once it stabilizes.
+
+## Principles
+
+1. **Generic first.** A feature lands here only if it helps any WordPress site on
+   Upsun. Site-specific behavior must be expressible through filters.
+2. **No-op everywhere else.** Off-platform (local, CI) the plugin loads and does
+   nothing. Malformed platform data degrades silently, never fatals.
+3. **wp-config wins.** The plugin never defines configuration constants; it reads
+   env and constants and fills runtime-behavior gaps.
+4. **Honest about the platform.** No feature that pretends an API exists (e.g.
+   router cache purge). Document limitations instead of papering over them.
+5. **Every module unit-tested** against the WP stubs in `tests/bootstrap.php`;
+   behavior assertions belong to the consumer's e2e suite against a real
+   preview environment.
+6. **Compatibility floor:** PHP 8.1+, WordPress 6.0+. Semver; 0.x minors may add
+   modules but must not change default behavior of existing ones.
+
+---
+
+## v0.2 — Preview safety, cache DX, and the Upsun dashboard
+
+The theme: make Upsun's clone-of-production preview environments safe by default,
+make the router cache debuggable, and give the plugin a home inside wp-admin.
+
+### Upsun dashboard page (`dashboard` module) — shipped in 0.2.0
+
+A top-level **"Upsun"** entry in the wp-admin sidebar (`add_menu_page`,
+`manage_options`, slug `upsun`; `dashicons-cloud` until an official Upsun logo
+asset is added), following the WP Engine/Kinsta pattern of a platform home
+inside wp-admin. This becomes the surface that all other features plug into,
+instead of each growing its own UI.
+
+- **Panel registry**: modules contribute panels via an
+  `upsun_dashboard_panels` filter (same extension philosophy as
+  `upsun_mu_modules`), so consumers and future modules can add their own.
+  Launch panels:
+  - *Environment* — name, type, branch, project, application, primary route,
+    PHP/WP/plugin versions, link to the Upsun Console (what the v0.1 dashboard
+    widget shows, expanded).
+  - *Services* — relationships with scheme/host/port (credentials never
+    rendered), object-cache status and hit/miss if the drop-in exposes stats.
+  - *Health* — the SiteHealth check registry rendered inline (same source as
+    `wp upsun doctor`), with re-run button.
+  - *Caching* — effective page-cache TTL, active bypass-cookie patterns and
+    strip list (resolved through the filters, so consumers see their overrides),
+    honest "router purge: not available" note.
+  - *Modules* — which modules are loaded/disabled and by what (constant vs
+    filter), so "why isn't X happening?" is answerable at a glance.
+- **Actions, not settings.** Operational buttons where applicable — flush
+  object cache, re-run health checks, later `sanitize now` (SafePreviews) and
+  `cache-check` form (enter a URL, see the verdict) — all nonce- and
+  capability-gated POSTs. Deliberately **no settings UI**: configuration stays
+  in code (constants/filters) where it is versioned and survives environment
+  clones; a DB-backed settings page would fight the platform's config model.
+- The v0.1 admin-bar badge and activity widget link here; the widget shrinks
+  to a summary + "open Upsun dashboard" link.
+- Toggle: `UPSUN_DISABLE_DASHBOARD` / registry entry `dashboard`.
+
+Shipped in 0.2.0: the shell, all five panels (the Caching panel in its static
+form), and the flush-object-cache action. The Caching panel's interactive
+cache-check form and the SafePreviews sanitize action land with their
+features below.
+
+### SafePreviews module (`safe-previews`)
+
+The flagship. Upsun previews are byte-for-byte clones of production — including
+live payment keys, webhook URLs, and CRM credentials. This module neuters
+outbound integrations on non-production environments:
+
+- **Mail policy**: on previews, default to intercepting `wp_mail` (short-circuit
+  via `pre_wp_mail`, log the message instead). Modes via
+  `upsun_safe_previews_mail` filter: `intercept` (default) | `allow` |
+  `redirect:<address>`.
+- **Payment gateways**: runtime-filter known gateways into test/sandbox mode
+  where the gateway supports it (start with WooCommerce Stripe; registry is
+  extensible via `upsun_safe_previews_actions`). Prefer runtime filters over DB
+  writes so behavior applies always and leaves the cloned data untouched.
+- **Outbound webhooks**: pause WooCommerce webhooks deliveries on previews
+  (runtime short-circuit, not status mutation, if achievable).
+- **Site hook**: fire `upsun_preview_sanitize` action on first boot in a fresh
+  clone so consumer code can scrub/adjust its own integrations.
+- **Fresh-clone detection**: store the environment name in an option
+  (`upsun_environment_stamp`); a mismatch between stored and current env means
+  "this database was just cloned from elsewhere" — that's the trigger for
+  one-time sanitize actions. (The clone carries the parent's stamp, which is
+  exactly what makes the mismatch detectable.)
+- **Opt-outs**: `UPSUN_DISABLE_SAFE_PREVIEWS`, per-concern filters. A real
+  staging domain that must send mail can allow-list itself.
+- **CLI**: `wp upsun sanitize [--dry-run]` to run the sanitize actions on
+  demand (deploy-hook friendly).
+
+Design constraint: KEDS's e2e suite currently forbids POSTs against previews
+because Stripe/FluentCRM are live there. Success criterion: with SafePreviews
+active, that warning can be deleted (FluentCRM specifics stay KEDS-side via the
+registry filter).
+
+### `wp upsun cache-check <url>`
+
+Self-service diagnosis of the #1 WordPress-on-Upsun support issue ("why isn't
+my page cached?"). Fetches the URL (optionally with `--cookie=` pairs) and
+explains the verdict:
+
+- which request cookie matched a bypass pattern (and the pattern),
+- whether the response carried `Set-Cookie` (and which cookie — the thing that
+  makes the router refuse to cache),
+- the emitted `Cache-Control` and effective s-maxage,
+- whether `DONOTCACHEPAGE`/prior no-cache headers spoiled it.
+
+Output: a table plus a one-line verdict (`cacheable for 600s` / `uncacheable:
+Set-Cookie lp_session_guest`). Documents (but cannot read) the router cookie
+allowlist — flag that as an assumption in output.
+
+### Cron heartbeat
+
+SiteHealth v0.1 checks configuration (`DISABLE_WP_CRON`), not execution. Add:
+
+- record a timestamp option (non-autoloaded) at the start of every cron process,
+- Site Health / `wp upsun doctor` check: warn when the heartbeat is older than
+  2× the expected interval (`upsun_cron_expected_interval`, default 600s),
+  plus an overdue-events count via `wp_get_ready_cron_jobs()`.
+
+### Login-screen environment banner
+
+Extend EnvironmentIndicator: colored banner on `wp-login.php` (via
+`login_message`/`login_enqueue_scripts`) naming the environment type and branch.
+The admin-bar badge only protects people who are already logged in; this
+protects them at the door. Same enable filter as the badge.
+
+---
+
+## v0.3 — Fleet features
+
+For adoption beyond the first customer.
+
+### Read-only-FS compat layer
+
+A registry of targeted fixes for popular plugins that assume writable
+`wp-content` (cache/log/backup writers: WP Rocket, Wordfence, UpdraftPlus, …):
+redirect their paths into the writable mounts, suppress their permission nags.
+Ship the *framework* (each fix = slug + `is_active()` + `apply()`, extensible
+via `upsun_compat_fixes`) with 2–3 proven fixes; grow the registry from real
+adoption reports. This is pantheon-mu-plugin's most-loved feature and matters
+more for generic adoption than anything else in v0.3.
+
+### Deploy migrations (`wp upsun migrate`)
+
+Generalize the shell-script framework proven in the KEDS repo: ordered,
+once-per-database PHP migration files from a consumer directory
+(`UPSUN_MIGRATIONS_DIR` / filter), tracked in options, `--dry-run` support,
+non-zero exit on failure so deploy hooks abort. Every serious WP-on-Upsun
+project reinvents this.
+
+### Relationship health & search wiring
+
+- `wp upsun relationships --health`: live checks per relationship (Redis
+  `INFO` memory/hit-rate, DB ping, search-service cluster status), surfaced in
+  Site Health too.
+- Auto-wiring helper for an Elasticsearch/OpenSearch relationship into
+  ElasticPress (host filter + Site Health check), behind a module toggle.
+
+### Mount usage visibility
+
+Dashboard widget + doctor check reporting disk usage of the writable mounts
+against the app's disk size (from `PLATFORM_APPLICATION`). Full mounts are a
+rude way to discover a quota. Note: mounts share one disk — report per-mount
+`du` cautiously (expensive; cache the result, compute on cron).
+
+---
+
+## v0.4+ / blocked on platform or demand
+
+- **Router cache purge** — blocked: the Upsun router exposes no purge API.
+  Pre-ship the API surface as documented no-ops (`Upsun\purge_paths()`,
+  `Upsun\purge_keys()`) with a pluggable backend so Fastly/Cloudflare-in-front
+  setups can adapter in, and the feature lights up if the platform ships purging.
+- **Multisite** — keep delegating to `upsun/wp-ms-dbu` until there's demand to
+  absorb it.
+- **Maintenance mode** — parity feature with pantheon-mu-plugin; low urgency.
+- **Environment-aware activity log** — real but well-served by existing plugins;
+  revisit if preview-safety auditing needs it.
+
+---
+
+## Extraction to an independent repo
+
+Trigger: a second real consumer (or Upsun/Platform.sh team adoption), or v0.3
+shipping — whichever comes first.
+
+Steps:
+
+1. Split `keds/packages/upsun-mu-plugin/` into its own repository with history
+   (`git filter-repo --subdirectory-filter`).
+2. Port the unit-test workflow (PHP 8.1 + 8.4 matrix) as the new repo's CI;
+   add a WP-integration smoke job (wp-env or the hermetic pattern from the
+   KEDS repo).
+3. Publish `upsun/wordpress-mu-plugin` on Packagist; tag = the composer.json
+   version. `archive.exclude` starts applying to dist installs (tests stop
+   shipping to consumers).
+4. KEDS swaps the path repository for a Packagist version constraint (`^0.x`)
+   — a two-line `composer.json` change; the loader-shim postbuild line is
+   unchanged.
+5. Distribution stays Composer-first. No wordpress.org listing: mu-plugins
+   aren't activatable and the loader-shim install step doesn't fit the plugin
+   directory model.
+
+Until then, this directory is the source of truth and the KEDS repo's CI is
+the plugin's CI.

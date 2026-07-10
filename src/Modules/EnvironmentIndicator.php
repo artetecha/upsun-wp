@@ -41,9 +41,14 @@ class EnvironmentIndicator implements Module {
 					esc_html( $branch ),
 					esc_html( $type )
 				),
-				'href'  => $this->console_url(),
+				'href'  => $this->badge_url(),
 				'meta'  => array( 'title' => __( 'Upsun environment', 'upsun-mu-plugin' ) ),
 			)
+		);
+
+		$hrefs = array(
+			'console'   => $this->console_url(),
+			'dashboard' => $this->dashboard_url(),
 		);
 
 		foreach ( $this->environment_details() as $id => $label ) {
@@ -52,7 +57,7 @@ class EnvironmentIndicator implements Module {
 					'parent' => 'upsun-environment',
 					'id'     => 'upsun-environment-' . $id,
 					'title'  => esc_html( $label ),
-					'href'   => 'console' === $id ? $this->console_url() : false,
+					'href'   => $hrefs[ $id ] ?? false,
 				)
 			);
 		}
@@ -104,12 +109,26 @@ class EnvironmentIndicator implements Module {
 
 		echo '</tbody></table>';
 
+		$links = array();
+
+		if ( null !== $this->dashboard_url() ) {
+			$links[] = sprintf(
+				'<a href="%s">%s</a>',
+				esc_url( $this->dashboard_url() ),
+				esc_html__( 'Open Upsun dashboard', 'upsun-mu-plugin' )
+			);
+		}
+
 		if ( null !== $this->console_url() ) {
-			printf(
-				'<p><a href="%s" target="_blank" rel="noopener noreferrer">%s</a></p>',
+			$links[] = sprintf(
+				'<a href="%s" target="_blank" rel="noopener noreferrer">%s</a>',
 				esc_url( $this->console_url() ),
 				esc_html__( 'Open in Upsun Console', 'upsun-mu-plugin' )
 			);
+		}
+
+		if ( array() !== $links ) {
+			echo '<p>' . implode( ' &middot; ', $links ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput -- links escaped above.
 		}
 	}
 
@@ -117,6 +136,24 @@ class EnvironmentIndicator implements Module {
 		$project = Environment::project();
 
 		return null === $project ? null : 'https://console.upsun.com/projects/' . rawurlencode( $project );
+	}
+
+	/**
+	 * The badge links to the Upsun dashboard page when it is available to
+	 * this user, falling back to the Console.
+	 */
+	private function badge_url(): ?string {
+		return null !== $this->dashboard_url() ? $this->dashboard_url() : $this->console_url();
+	}
+
+	private function dashboard_url(): ?string {
+		$dashboard_loaded = 'loaded' === ( \Upsun\ModuleRegistry::status()['dashboard']['state'] ?? '' );
+
+		if ( ! $dashboard_loaded || ! current_user_can( 'manage_options' ) ) {
+			return null;
+		}
+
+		return admin_url( 'admin.php?page=' . Dashboard::MENU_SLUG );
 	}
 
 	/**
@@ -135,6 +172,10 @@ class EnvironmentIndicator implements Module {
 
 		if ( null !== Environment::application_name() ) {
 			$details['app'] = sprintf( __( 'Application: %s', 'upsun-mu-plugin' ), Environment::application_name() );
+		}
+
+		if ( null !== $this->dashboard_url() ) {
+			$details['dashboard'] = __( 'Open Upsun dashboard', 'upsun-mu-plugin' );
 		}
 
 		if ( null !== $this->console_url() ) {

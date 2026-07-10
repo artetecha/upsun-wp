@@ -4,6 +4,8 @@ Platform integration for WordPress running on [Upsun](https://upsun.com): enviro
 
 The plugin detects Upsun at runtime (`PLATFORM_APPLICATION_NAME` + `PLATFORM_ENVIRONMENT`) and **fully no-ops anywhere else** — local development and CI need no special-casing. It reads platform variables directly and never defines WordPress configuration constants: your `wp-config.php` stays the single owner of database credentials, URLs, salts, and `WP_ENVIRONMENT_TYPE`.
 
+This is a generic plugin for any WordPress project on Upsun. It currently lives inside the KEDS repository, which acts as its first consumer and test bed, and will be extracted to an independent repository as it stabilizes (see [ROADMAP.md](ROADMAP.md)). Site-specific behavior belongs in the consuming project via the filters below — never in this package.
+
 ## Installation (Composer-managed WordPress)
 
 ```jsonc
@@ -43,13 +45,14 @@ The package installs into `mu-plugins/upsun/`. WordPress does not scan mu-plugin
 | `site-health` | Upsun-specific Site Health checks: object cache round-trip, cron configuration, writable mounts, preview search visibility; plus an "Upsun" section in the Info tab. |
 | `preview-protection` | Sends `X-Robots-Tag: noindex, nofollow` and robots meta on non-production environments, without touching the `blog_public` option (the database is a production clone). |
 | `smtp` | Points PHPMailer at the on-platform relay (`PLATFORM_SMTP_HOST`, port 25) unless a mailer plugin already configured SMTP. |
+| `dashboard` | A top-level "Upsun" page in wp-admin (`manage_options`): environment, services (credentials never rendered), health checks, resolved caching config, and module status panels, plus operational actions (flush object cache). Extensible via `upsun_dashboard_panels`; deliberately actions-not-settings — configuration stays in code. |
 
 ## Configuration
 
 ### Constants (wp-config friendly)
 
 - `UPSUN_MU_DISABLE` — kill switch for the whole plugin.
-- `UPSUN_DISABLE_ENVIRONMENT_INDICATOR`, `UPSUN_DISABLE_PAGE_CACHE`, `UPSUN_DISABLE_UPDATES_POLICY`, `UPSUN_DISABLE_SITE_HEALTH`, `UPSUN_DISABLE_PREVIEW_PROTECTION`, `UPSUN_DISABLE_SMTP` — per-module switches.
+- `UPSUN_DISABLE_ENVIRONMENT_INDICATOR`, `UPSUN_DISABLE_PAGE_CACHE`, `UPSUN_DISABLE_UPDATES_POLICY`, `UPSUN_DISABLE_SITE_HEALTH`, `UPSUN_DISABLE_PREVIEW_PROTECTION`, `UPSUN_DISABLE_SMTP`, `UPSUN_DISABLE_DASHBOARD` — per-module switches.
 - `UPSUN_MU_FORCE` — boot modules off-platform (testing against faked `PLATFORM_*` variables).
 
 ### Filters
@@ -69,6 +72,8 @@ Module boot is deferred to `muplugins_loaded` priority 0, so **any mu-plugin** c
 | `upsun_site_health_tests` | `array` | built-in checks | Add/remove health checks (shared with `wp upsun doctor`). |
 | `upsun_preview_noindex` | `bool` | `true` | Disable noindex on non-production (e.g. an indexable staging domain). |
 | `upsun_configure_smtp` | `bool` | `true` | Keep the plugin away from PHPMailer (a mailer plugin owns SMTP). |
+| `upsun_dashboard_enabled` | `bool` | `true` | Hide the "Upsun" wp-admin page. |
+| `upsun_dashboard_panels` | `array<string, {title, render}>` | 5 built-in panels | Add/remove/reorder dashboard panels. |
 
 ### Helper functions
 
@@ -94,8 +99,12 @@ composer test   # PHPUnit, no WordPress install required
 
 PHP floor is **8.1** (enforced in CI); tests are standalone with minimal WordPress function stubs.
 
-## Roadmap (not in v0.1)
+## Roadmap
 
-- Router/CDN cache purge helpers — blocked on a router purge API.
-- Multisite awareness (see [upsun/wp-ms-dbu](https://github.com/upsun/wp-ms-dbu) for domain rewriting).
-- Plugin compatibility layer; maintenance mode; deploy/build introspection.
+See [ROADMAP.md](ROADMAP.md) for the versioned plan — headline items: an
+"Upsun" dashboard page in wp-admin (environment/services/health panels +
+operational actions, extensible via `upsun_dashboard_panels`), a SafePreviews
+module (neuter live payment/webhook/mail integrations on preview clones),
+`wp upsun cache-check` (explain why a page is/isn't router-cacheable), cron
+execution heartbeat, a read-only-FS plugin compatibility layer, and
+`wp upsun migrate`. Router cache purge remains blocked on a platform purge API.
