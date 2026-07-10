@@ -1,5 +1,22 @@
 # Roadmap
 
+## Status (2026-07-08)
+
+| Milestone | Item | Status |
+|---|---|---|
+| v0.2 | Upsun dashboard page (`dashboard` module) | ✅ shipped in 0.2.0 (PR #44), verified on a preview env |
+| v0.2 | Cron heartbeat (`cron-heartbeat` module) | ✅ shipped in 0.2.1 (PR #45), `wp upsun doctor` verified live |
+| v0.2 | Login-screen environment banner | ✅ shipped in 0.2.1 (PR #45), verified on a preview env |
+| v0.2 | SafePreviews module + `wp upsun sanitize` | ⬜ next up |
+| v0.2 | `wp upsun cache-check <url>` | ⬜ not started |
+| v0.3 | Compat layer, `wp upsun migrate`, relationship health, mount usage | ⬜ not started |
+| — | Extraction to an independent repo | ⬜ triggered by second consumer or v0.3 |
+
+The v0.2 milestone spans 0.2.x releases; version = package `composer.json` /
+`UPSUN_MU_PLUGIN_VERSION`.
+
+---
+
 This package is a **generic platform plugin for WordPress on Upsun** — not a KEDS
 component. KEDS is the first customer: it consumes the plugin through the public
 filter/constant API only, and anything KEDS-specific lives in the consuming repo
@@ -117,21 +134,21 @@ Output: a table plus a one-line verdict (`cacheable for 600s` / `uncacheable:
 Set-Cookie lp_session_guest`). Documents (but cannot read) the router cookie
 allowlist — flag that as an assumption in output.
 
-### Cron heartbeat
+### Cron heartbeat — shipped in 0.2.1
 
-SiteHealth v0.1 checks configuration (`DISABLE_WP_CRON`), not execution. Add:
+SiteHealth v0.1 checks configuration (`DISABLE_WP_CRON`), not execution. The
+`cron-heartbeat` module schedules a recurring event (default hourly, filter
+`upsun_cron_heartbeat_schedule`) that stamps a non-autoloaded timestamp
+option; the shared check registry then warns at 2× the schedule interval and
+fails at 4×, with an overdue-events count via `wp_get_ready_cron_jobs()`.
+Reported by Site Health, the dashboard Health panel, and `wp upsun doctor`.
 
-- record a timestamp option (non-autoloaded) at the start of every cron process,
-- Site Health / `wp upsun doctor` check: warn when the heartbeat is older than
-  2× the expected interval (`upsun_cron_expected_interval`, default 600s),
-  plus an overdue-events count via `wp_get_ready_cron_jobs()`.
+### Login-screen environment banner — shipped in 0.2.1
 
-### Login-screen environment banner
-
-Extend EnvironmentIndicator: colored banner on `wp-login.php` (via
-`login_message`/`login_enqueue_scripts`) naming the environment type and branch.
-The admin-bar badge only protects people who are already logged in; this
-protects them at the door. Same enable filter as the badge.
+EnvironmentIndicator renders a colored banner above the login form (via
+`login_message`) naming the environment type and branch, using the badge
+color coding. The admin-bar badge only protects people who are already logged
+in; this protects them at the door. Opt out via `upsun_login_banner`.
 
 ---
 

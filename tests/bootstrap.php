@@ -94,8 +94,49 @@ function wp_using_ext_object_cache() {
 	return false;
 }
 
+// Option store: tests may seed $GLOBALS['upsun_test_options']; unseeded
+// options return 1 (truthy) to preserve pre-existing test expectations.
+$GLOBALS['upsun_test_options'] = array();
+
 function get_option( $name, $default_value = false ) {
-	return 1;
+	return $GLOBALS['upsun_test_options'][ $name ] ?? 1;
+}
+
+function update_option( $name, $value, $autoload = null ) {
+	$GLOBALS['upsun_test_options'][ $name ] = $value;
+
+	return true;
+}
+
+// Cron stubs: a flat store of scheduled hooks.
+$GLOBALS['upsun_test_cron'] = array();
+
+function wp_next_scheduled( $hook, $args = array() ) {
+	return $GLOBALS['upsun_test_cron'][ $hook ] ?? false;
+}
+
+function wp_schedule_event( $timestamp, $recurrence, $hook, $args = array() ) {
+	$GLOBALS['upsun_test_cron'][ $hook ] = $timestamp;
+
+	return true;
+}
+
+function wp_get_schedules() {
+	return array(
+		'hourly'     => array( 'interval' => 3600 ),
+		'twicedaily' => array( 'interval' => 43200 ),
+		'daily'      => array( 'interval' => 86400 ),
+	);
+}
+
+function wp_get_ready_cron_jobs() {
+	return array();
+}
+
+function human_time_diff( $from, $to = 0 ) {
+	$to = $to ? $to : time();
+
+	return sprintf( '%d mins', max( 1, round( abs( $to - $from ) / 60 ) ) );
 }
 
 function wp_upload_dir() {
@@ -120,6 +161,7 @@ require_once dirname( __DIR__ ) . '/src/Modules/SiteHealth.php';
 require_once dirname( __DIR__ ) . '/src/Modules/PreviewProtection.php';
 require_once dirname( __DIR__ ) . '/src/Modules/Smtp.php';
 require_once dirname( __DIR__ ) . '/src/Modules/Dashboard.php';
+require_once dirname( __DIR__ ) . '/src/Modules/CronHeartbeat.php';
 
 /**
  * Unset every PLATFORM_* variable a test may have set, and clear caches.

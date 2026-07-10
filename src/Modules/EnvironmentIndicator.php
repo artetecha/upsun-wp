@@ -21,11 +21,63 @@ class EnvironmentIndicator implements Module {
 		return (bool) apply_filters( 'upsun_environment_indicator_enabled', true );
 	}
 
+	/**
+	 * The badge/banner color per environment type. Keep in sync with
+	 * assets/environment-indicator.css.
+	 */
+	private const TYPE_COLORS = array(
+		'production'  => '#00753b',
+		'staging'     => '#b45309',
+		'development' => '#6d28d9',
+	);
+
+	private const UNKNOWN_COLOR = '#50575e';
+
 	public function register(): void {
 		add_action( 'admin_bar_menu', array( $this, 'add_admin_bar_badge' ), 1 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_styles' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_styles' ) );
 		add_action( 'wp_dashboard_setup', array( $this, 'register_dashboard_widget' ) );
+		add_filter( 'login_message', array( $this, 'login_banner' ) );
+	}
+
+	/**
+	 * A colored environment banner above the login form: the admin-bar badge
+	 * only protects people who are already logged in — this one stops the
+	 * "edited the preview clone thinking it was production" mistake at the
+	 * door.
+	 *
+	 * @param mixed $message Existing login message.
+	 */
+	public function login_banner( $message ): string {
+		$message = is_string( $message ) ? $message : '';
+
+		/**
+		 * Filters whether the login-screen environment banner is shown.
+		 *
+		 * @param bool $enabled Default true.
+		 */
+		if ( ! (bool) apply_filters( 'upsun_login_banner', true ) ) {
+			return $message;
+		}
+
+		$type   = Environment::type() ?? 'unknown';
+		$branch = Environment::branch() ?? Environment::name() ?? '?';
+
+		$banner = sprintf(
+			'<div class="upsun-login-banner" style="margin: 0 0 16px; padding: 8px 12px; border-radius: 3px; text-align: center; font-weight: 600; color: #fff; background: %s;">%s</div>',
+			esc_attr( self::TYPE_COLORS[ $type ] ?? self::UNKNOWN_COLOR ),
+			esc_html(
+				sprintf(
+					/* translators: 1: branch name, 2: environment type. */
+					__( 'Upsun: %1$s · %2$s', 'upsun-mu-plugin' ),
+					$branch,
+					$type
+				)
+			)
+		);
+
+		return $banner . $message;
 	}
 
 	public function add_admin_bar_badge( \WP_Admin_Bar $admin_bar ): void {

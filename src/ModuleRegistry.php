@@ -12,6 +12,7 @@ final class ModuleRegistry {
 		'preview-protection'    => Modules\PreviewProtection::class,
 		'smtp'                  => Modules\Smtp::class,
 		'dashboard'             => Modules\Dashboard::class,
+		'cron-heartbeat'        => Modules\CronHeartbeat::class,
 	);
 
 	/**

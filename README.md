@@ -39,20 +39,21 @@ The package installs into `mu-plugins/upsun/`. WordPress does not scan mu-plugin
 
 | Module | What it does |
 |---|---|
-| `environment-indicator` | Color-coded admin-bar badge (branch · environment type) with an Upsun Console link, plus a dashboard widget with environment metadata. |
+| `environment-indicator` | Color-coded admin-bar badge (branch · environment type) with an Upsun Console link, a dashboard widget with environment metadata, and a matching banner on the login screen. |
 | `page-cache` | Emits `Cache-Control: public, max-age=0, s-maxage={ttl}` on anonymous, session-free page views so the Upsun router can cache them; optionally strips configured Set-Cookie headers (e.g. LMS guest sessions) to keep responses cacheable. |
 | `updates-policy` | Disables the in-app auto-update machinery (the filesystem is read-only; Composer is the update path), replaces the auto-update toggles with a note, and removes the core Site Health tests that would fail by design. |
 | `site-health` | Upsun-specific Site Health checks: object cache round-trip, cron configuration, writable mounts, preview search visibility; plus an "Upsun" section in the Info tab. |
 | `preview-protection` | Sends `X-Robots-Tag: noindex, nofollow` and robots meta on non-production environments, without touching the `blog_public` option (the database is a production clone). |
 | `smtp` | Points PHPMailer at the on-platform relay (`PLATFORM_SMTP_HOST`, port 25) unless a mailer plugin already configured SMTP. |
 | `dashboard` | A top-level "Upsun" page in wp-admin (`manage_options`): environment, services (credentials never rendered), health checks, resolved caching config, and module status panels, plus operational actions (flush object cache). Extensible via `upsun_dashboard_panels`; deliberately actions-not-settings — configuration stays in code. |
+| `cron-heartbeat` | Proves cron *executes*, not just that it is configured: schedules a recurring event that stamps a timestamp option, and reports staleness (plus overdue-event counts) through Site Health, the dashboard, and `wp upsun doctor`. |
 
 ## Configuration
 
 ### Constants (wp-config friendly)
 
 - `UPSUN_MU_DISABLE` — kill switch for the whole plugin.
-- `UPSUN_DISABLE_ENVIRONMENT_INDICATOR`, `UPSUN_DISABLE_PAGE_CACHE`, `UPSUN_DISABLE_UPDATES_POLICY`, `UPSUN_DISABLE_SITE_HEALTH`, `UPSUN_DISABLE_PREVIEW_PROTECTION`, `UPSUN_DISABLE_SMTP`, `UPSUN_DISABLE_DASHBOARD` — per-module switches.
+- `UPSUN_DISABLE_ENVIRONMENT_INDICATOR`, `UPSUN_DISABLE_PAGE_CACHE`, `UPSUN_DISABLE_UPDATES_POLICY`, `UPSUN_DISABLE_SITE_HEALTH`, `UPSUN_DISABLE_PREVIEW_PROTECTION`, `UPSUN_DISABLE_SMTP`, `UPSUN_DISABLE_DASHBOARD`, `UPSUN_DISABLE_CRON_HEARTBEAT` — per-module switches.
 - `UPSUN_MU_FORCE` — boot modules off-platform (testing against faked `PLATFORM_*` variables).
 
 ### Filters
@@ -74,6 +75,9 @@ Module boot is deferred to `muplugins_loaded` priority 0, so **any mu-plugin** c
 | `upsun_configure_smtp` | `bool` | `true` | Keep the plugin away from PHPMailer (a mailer plugin owns SMTP). |
 | `upsun_dashboard_enabled` | `bool` | `true` | Hide the "Upsun" wp-admin page. |
 | `upsun_dashboard_panels` | `array<string, {title, render}>` | 5 built-in panels | Add/remove/reorder dashboard panels. |
+| `upsun_login_banner` | `bool` | `true` | Hide the login-screen environment banner. |
+| `upsun_cron_heartbeat_enabled` | `bool` | `true` | Disable the heartbeat event and its check. |
+| `upsun_cron_heartbeat_schedule` | `string` | `'hourly'` | WP-Cron schedule for the heartbeat event (staleness thresholds scale with it). |
 
 ### Helper functions
 
