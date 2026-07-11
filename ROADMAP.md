@@ -57,6 +57,10 @@ instead of each growing its own UI.
 - **Panel registry**: modules contribute panels via an
   `upsun_dashboard_panels` filter (same extension philosophy as
   `upsun_mu_modules`), so consumers and future modules can add their own.
+  Since 0.2.3 panels are real meta boxes in the core dashboard grid
+  (`do_meta_boxes` + postbox.js): collapsible, draggable between the four
+  columns, per-user layout persistence — the WP Dashboard experience, all
+  stock wp-admin machinery.
   Launch panels:
   - *Environment* — name, type, branch, project, application, primary route,
     PHP/WP/plugin versions, link to the Upsun Console (what the v0.1 dashboard

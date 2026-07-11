@@ -28,6 +28,7 @@ final class DashboardTest extends TestCase {
 		foreach ( $panels as $id => $panel ) {
 			$this->assertIsCallable( $panel['render'], "panel {$id} render callback" );
 			$this->assertNotSame( '', (string) $panel['title'], "panel {$id} title" );
+			$this->assertContains( $panel['context'], array( 'normal', 'side', 'column3', 'column4' ), "panel {$id} context" );
 		}
 	}
 
@@ -132,6 +133,15 @@ final class DashboardTest extends TestCase {
 		$this->assertStringContainsString( 'upsun-panel-health', $html );
 		$this->assertStringContainsString( 'upsun-panel-caching', $html );
 		$this->assertStringContainsString( 'upsun-panel-modules', $html );
+
+		// The core dashboard grid: four containers, one sortable each, and
+		// the nonces postbox.js posts when persisting layout state.
+		$this->assertStringContainsString( 'id="dashboard-widgets"', $html );
+		$this->assertStringContainsString( 'postbox-container-4', $html );
+		$this->assertStringContainsString( 'normal-sortables', $html );
+		$this->assertStringContainsString( 'column4-sortables', $html );
+		$this->assertStringContainsString( 'meta-box-order-nonce', $html );
+		$this->assertStringContainsString( 'closedpostboxesnonce', $html );
 
 		// Health checks actually ran and rendered rows.
 		$this->assertStringContainsString( 'Cron configuration', $html );

@@ -555,8 +555,9 @@ class SafePreviews implements Module {
 
 	public function add_panel( array $panels ): array {
 		$panels['preview-safety'] = array(
-			'title'  => __( 'Preview safety', 'upsun-mu-plugin' ),
-			'render' => array( $this, 'render_panel' ),
+			'title'   => __( 'Preview safety', 'upsun-mu-plugin' ),
+			'render'  => array( $this, 'render_panel' ),
+			'context' => 'side',
 		);
 
 		return $panels;
@@ -581,7 +582,7 @@ class SafePreviews implements Module {
 			$state = call_user_func( $protection['status'] );
 
 			printf(
-				'<tr><td style="width: 30%%;">%s</td><td style="width: 15%%;">%s</td><td>%s</td></tr>',
+				'<tr><td>%s</td><td>%s</td><td>%s</td></tr>',
 				esc_html( (string) ( $protection['label'] ?? $id ) ),
 				$this->state_badge( (string) ( $state['state'] ?? '' ) ),
 				esc_html( (string) ( $state['detail'] ?? '' ) )

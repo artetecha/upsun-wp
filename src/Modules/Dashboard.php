@@ -19,7 +19,25 @@ class Dashboard implements Module {
 
 	public const MENU_SLUG = 'upsun';
 
+	/** The screen id WordPress derives for a top-level page with our slug. */
+	public const SCREEN = 'toplevel_page_upsun';
+
 	private const FLUSH_ACTION = 'upsun_flush_object_cache';
+
+	/** The four metabox contexts of the core dashboard grid, in column order. */
+	private const CONTEXTS = array( 'normal', 'side', 'column3', 'column4' );
+
+	/**
+	 * Light modernization on top of the core postbox styles, scoped to our
+	 * page. Everything else (grid, drag, collapse) is stock wp-admin.
+	 */
+	private const PAGE_CSS = '
+		#upsun-dashboard .postbox { border-radius: 8px; box-shadow: 0 1px 2px rgba(0, 0, 0, .05); }
+		#upsun-dashboard .postbox-header { border-bottom-color: #f0f0f1; }
+		#upsun-dashboard #dashboard-widgets .postbox .inside { padding-bottom: 12px; margin-bottom: 0; }
+		#upsun-dashboard .postbox table.widefat td:first-child { white-space: nowrap; }
+		#upsun-dashboard .postbox code { overflow-wrap: anywhere; }
+	';
 
 	/**
 	 * The official Upsun mark (upsun.com favicon, vector version). Embedded
@@ -41,7 +59,30 @@ class Dashboard implements Module {
 	public function register(): void {
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
 		add_action( 'admin_menu', array( $this, 'pin_menu_position' ), PHP_INT_MAX );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'admin_post_' . self::FLUSH_ACTION, array( $this, 'handle_flush_object_cache' ) );
+	}
+
+	/**
+	 * Core assets that make the page behave like the WP Dashboard: the
+	 * dashboard stylesheet (responsive column grid), the postbox script
+	 * (collapsible + draggable boxes, order/closed state persisted per user
+	 * through the same AJAX endpoints index.php uses).
+	 *
+	 * @param string $hook_suffix Current admin page hook.
+	 */
+	public function enqueue_assets( $hook_suffix ): void {
+		if ( self::SCREEN !== $hook_suffix ) {
+			return;
+		}
+
+		wp_enqueue_style( 'dashboard' );
+		wp_add_inline_style( 'dashboard', self::PAGE_CSS );
+		wp_enqueue_script( 'postbox' );
+		wp_add_inline_script(
+			'postbox',
+			sprintf( 'jQuery( function() { postboxes.add_postbox_toggles( %s ); } );', wp_json_encode( self::SCREEN ) )
+		);
 	}
 
 	public function register_menu(): void {
@@ -140,32 +181,40 @@ class Dashboard implements Module {
 	}
 
 	/**
-	 * The panel registry: id => [ title, render ]. Render callbacks echo
-	 * their panel body.
+	 * The panel registry: id => [ title, render, context ]. Render
+	 * callbacks echo their panel body; context is one of the four core
+	 * dashboard columns (normal | side | column3 | column4, defaulting to
+	 * normal) and only sets the initial placement — users can drag panels
+	 * anywhere, and their layout is persisted per user.
 	 *
-	 * @return array<string, array{title: string, render: callable}>
+	 * @return array<string, array{title: string, render: callable, context?: string}>
 	 */
 	public function panels(): array {
 		$panels = array(
 			'environment' => array(
-				'title'  => __( 'Environment', 'upsun-mu-plugin' ),
-				'render' => array( $this, 'render_environment_panel' ),
+				'title'   => __( 'Environment', 'upsun-mu-plugin' ),
+				'render'  => array( $this, 'render_environment_panel' ),
+				'context' => 'normal',
 			),
 			'services'    => array(
-				'title'  => __( 'Services', 'upsun-mu-plugin' ),
-				'render' => array( $this, 'render_services_panel' ),
+				'title'   => __( 'Services', 'upsun-mu-plugin' ),
+				'render'  => array( $this, 'render_services_panel' ),
+				'context' => 'side',
 			),
 			'health'      => array(
-				'title'  => __( 'Health', 'upsun-mu-plugin' ),
-				'render' => array( $this, 'render_health_panel' ),
+				'title'   => __( 'Health', 'upsun-mu-plugin' ),
+				'render'  => array( $this, 'render_health_panel' ),
+				'context' => 'normal',
 			),
 			'caching'     => array(
-				'title'  => __( 'Caching', 'upsun-mu-plugin' ),
-				'render' => array( $this, 'render_caching_panel' ),
+				'title'   => __( 'Caching', 'upsun-mu-plugin' ),
+				'render'  => array( $this, 'render_caching_panel' ),
+				'context' => 'column3',
 			),
 			'modules'     => array(
-				'title'  => __( 'Modules', 'upsun-mu-plugin' ),
-				'render' => array( $this, 'render_modules_panel' ),
+				'title'   => __( 'Modules', 'upsun-mu-plugin' ),
+				'render'  => array( $this, 'render_modules_panel' ),
+				'context' => 'column4',
 			),
 		);
 
@@ -173,7 +222,7 @@ class Dashboard implements Module {
 		 * Filters the dashboard panel registry. Modules and consumers can
 		 * add, remove, or reorder panels.
 		 *
-		 * @param array $panels id => [ 'title' => string, 'render' => callable ].
+		 * @param array $panels id => [ 'title' => string, 'render' => callable, 'context' => string ].
 		 */
 		return (array) apply_filters( 'upsun_dashboard_panels', $panels );
 	}
@@ -183,7 +232,9 @@ class Dashboard implements Module {
 			return;
 		}
 
-		echo '<div class="wrap" style="max-width: 900px;">';
+		$this->register_panel_meta_boxes();
+
+		echo '<div class="wrap" id="upsun-dashboard">';
 		printf(
 			'<h1>%s <span style="font-size: 0.5em; color: #757575;">%s %s</span></h1>',
 			esc_html__( 'Upsun', 'upsun-mu-plugin' ),
@@ -193,21 +244,48 @@ class Dashboard implements Module {
 
 		$this->render_notice();
 
-		echo '<div class="metabox-holder">';
+		// The core dashboard grid: dashboard.css lays the four containers
+		// out responsively, postbox.js makes their sortables drag targets.
+		echo '<div id="dashboard-widgets-wrap"><div id="dashboard-widgets" class="metabox-holder">';
 
+		foreach ( self::CONTEXTS as $index => $context ) {
+			printf( '<div id="postbox-container-%d" class="postbox-container">', $index + 1 );
+			do_meta_boxes( self::SCREEN, $context, null );
+			echo '</div>';
+		}
+
+		echo '</div></div>';
+
+		// postbox.js posts these when persisting collapsed state and order.
+		wp_nonce_field( 'closedpostboxes', 'closedpostboxesnonce', false );
+		wp_nonce_field( 'meta-box-order', 'meta-box-order-nonce', false );
+
+		echo '</div>';
+	}
+
+	/**
+	 * Register each panel as a real meta box so core supplies the chrome:
+	 * collapse toggles, drag handles, keyboard ordering, and the per-user
+	 * saved layout applied by do_meta_boxes().
+	 */
+	private function register_panel_meta_boxes(): void {
 		foreach ( $this->panels() as $id => $panel ) {
 			if ( ! is_callable( $panel['render'] ?? null ) ) {
 				continue;
 			}
 
-			printf( '<div class="postbox" id="upsun-panel-%s">', esc_attr( (string) $id ) );
-			printf( '<h2 class="hndle" style="padding: 8px 12px; margin: 0;">%s</h2>', esc_html( (string) ( $panel['title'] ?? $id ) ) );
-			echo '<div class="inside">';
-			call_user_func( $panel['render'] );
-			echo '</div></div>';
-		}
+			$context = (string) ( $panel['context'] ?? 'normal' );
 
-		echo '</div></div>';
+			add_meta_box(
+				'upsun-panel-' . (string) $id,
+				(string) ( $panel['title'] ?? $id ),
+				static function () use ( $panel ) {
+					call_user_func( $panel['render'] );
+				},
+				self::SCREEN,
+				in_array( $context, self::CONTEXTS, true ) ? $context : 'normal'
+			);
+		}
 	}
 
 	public function render_environment_panel(): void {
@@ -229,7 +307,7 @@ class Dashboard implements Module {
 
 		foreach ( $rows as $label => $value ) {
 			printf(
-				'<tr><td style="width: 30%%;">%s</td><td>%s</td></tr>',
+				'<tr><td>%s</td><td>%s</td></tr>',
 				esc_html( $label ),
 				esc_html( $value ?? '—' )
 			);
@@ -305,7 +383,7 @@ class Dashboard implements Module {
 			$result = call_user_func( $check['callback'] );
 
 			printf(
-				'<tr><td style="width: 30%%;">%s</td><td style="width: 10%%;">%s</td><td>%s</td></tr>',
+				'<tr><td>%s</td><td>%s</td><td>%s</td></tr>',
 				esc_html( (string) ( $check['label'] ?? $id ) ),
 				$this->status_badge( (string) ( $result['status'] ?? 'warn' ) ),
 				esc_html( (string) ( $result['message'] ?? '' ) )
@@ -346,7 +424,7 @@ class Dashboard implements Module {
 
 		foreach ( $rows as $label => $value ) {
 			printf(
-				'<tr><td style="width: 30%%;">%s</td><td><code>%s</code></td></tr>',
+				'<tr><td>%s</td><td><code>%s</code></td></tr>',
 				esc_html( $label ),
 				esc_html( $value )
 			);
@@ -376,7 +454,7 @@ class Dashboard implements Module {
 
 		foreach ( $status as $id => $module ) {
 			printf(
-				'<tr><td style="width: 30%%;">%s</td><td style="width: 30%%;">%s</td><td><code>%s</code></td></tr>',
+				'<tr><td>%s</td><td>%s</td><td><code>%s</code></td></tr>',
 				esc_html( (string) $id ),
 				esc_html( $this->state_label( $module['state'], (string) $id ) ),
 				esc_html( $module['class'] )

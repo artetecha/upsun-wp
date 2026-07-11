@@ -18,9 +18,10 @@ $GLOBALS['upsun_test_actions'] = array();
 $GLOBALS['upsun_test_fired']   = array();
 
 function upsun_test_reset_hooks(): void {
-	$GLOBALS['upsun_test_filters'] = array();
-	$GLOBALS['upsun_test_actions'] = array();
-	$GLOBALS['upsun_test_fired']   = array();
+	$GLOBALS['upsun_test_filters']    = array();
+	$GLOBALS['upsun_test_actions']    = array();
+	$GLOBALS['upsun_test_fired']      = array();
+	$GLOBALS['upsun_test_meta_boxes'] = array();
 }
 
 function add_filter( $hook, $callback, $priority = 10, $accepted_args = 1 ) {
@@ -103,12 +104,48 @@ function sanitize_key( $key ) {
 	return strtolower( preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $key ) ) );
 }
 
-function wp_nonce_field( ...$args ) {
-	echo '<input type="hidden" name="_wpnonce" value="test">';
+function wp_nonce_field( $action = -1, $name = '_wpnonce', $referer = true, $display = true ) {
+	echo '<input type="hidden" name="' . $name . '" value="test">';
 }
 
 function wp_using_ext_object_cache() {
 	return false;
+}
+
+// Meta box store: enough to register boxes and render them per context in
+// the core postbox markup, so dashboard-grid assertions are meaningful.
+$GLOBALS['upsun_test_meta_boxes'] = array();
+
+function add_meta_box( $id, $title, $callback, $screen = null, $context = 'normal', $priority = 'default', $args = null ) {
+	$GLOBALS['upsun_test_meta_boxes'][ (string) $context ][] = array(
+		'id'       => (string) $id,
+		'title'    => (string) $title,
+		'callback' => $callback,
+	);
+}
+
+function do_meta_boxes( $screen, $context, $object ) {
+	printf( '<div id="%s-sortables" class="meta-box-sortables">', $context );
+
+	foreach ( $GLOBALS['upsun_test_meta_boxes'][ (string) $context ] ?? array() as $box ) {
+		printf( '<div id="%s" class="postbox"><div class="postbox-header"><h2 class="hndle">%s</h2></div><div class="inside">', $box['id'], $box['title'] );
+		call_user_func( $box['callback'], $object, $box );
+		echo '</div></div>';
+	}
+
+	echo '</div>';
+}
+
+function wp_enqueue_style( ...$args ) {}
+
+function wp_enqueue_script( ...$args ) {}
+
+function wp_add_inline_style( ...$args ) {}
+
+function wp_add_inline_script( ...$args ) {}
+
+function wp_json_encode( $value, $flags = 0, $depth = 512 ) {
+	return json_encode( $value, $flags, $depth );
 }
 
 // Option store: tests may seed $GLOBALS['upsun_test_options']; unseeded
