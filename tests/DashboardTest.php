@@ -150,6 +150,9 @@ final class DashboardTest extends TestCase {
 		$this->assertStringContainsString( 'upsun_flush_object_cache', $html );
 		$this->assertStringContainsString( 'admin-post.php', $html );
 
+		// The cache-check form is present in the Caching panel.
+		$this->assertStringContainsString( 'name="upsun-cache-check"', $html );
+
 		// Off-platform, unbooted: the modules panel explains itself.
 		$this->assertStringContainsString( 'No modules booted', $html );
 	}

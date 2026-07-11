@@ -2,6 +2,7 @@
 
 namespace Upsun\Cli;
 
+use Upsun\CacheCheck;
 use Upsun\Environment;
 use Upsun\Modules\SafePreviews;
 use Upsun\Modules\SiteHealth;
@@ -166,6 +167,79 @@ class UpsunCommand {
 			$rows,
 			array( 'relationship', 'scheme', 'host', 'port', 'path' )
 		);
+	}
+
+	/**
+	 * Explains whether the Upsun router would cache a URL, and why.
+	 *
+	 * Fetches the URL once (redirects not followed) and reports the
+	 * verdict: the emitted Cache-Control and effective TTL, Set-Cookie
+	 * headers (which make the router refuse to cache), request cookies
+	 * matching the page-cache bypass patterns, the route's cache settings
+	 * from PLATFORM_ROUTES, and whether this fetch was a router HIT, MISS,
+	 * or BYPASS.
+	 *
+	 * ## OPTIONS
+	 *
+	 * <url>
+	 * : The URL to check. A path like /courses/ is resolved against the
+	 * environment's primary route.
+	 *
+	 * [--cookie=<header>]
+	 * : Send a Cookie header, e.g. --cookie="lp_session_guest=x; foo=1".
+	 *
+	 * [--auth=<credentials>]
+	 * : HTTP basic auth credentials as "user:pass", for environments behind
+	 * access control (without them the verdict describes the 401 challenge,
+	 * not the page). Note: WP-CLI synopsis tokens cannot contain a colon,
+	 * hence the generic placeholder.
+	 *
+	 * [--format=<format>]
+	 * : Render output in a particular format.
+	 * ---
+	 * default: table
+	 * options:
+	 *   - table
+	 *   - json
+	 *   - yaml
+	 *   - csv
+	 * ---
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp upsun cache-check /
+	 *     wp upsun cache-check /courses/ --cookie="wordpress_logged_in_x=1"
+	 *     wp upsun cache-check / --auth=preview:secret
+	 *
+	 * @subcommand cache-check
+	 */
+	public function cache_check( $args, $assoc_args ) {
+		if ( ! Environment::is_upsun() ) {
+			WP_CLI::log( 'Not running on Upsun.' );
+			return;
+		}
+
+		$report = CacheCheck::run(
+			(string) ( $args[0] ?? '' ),
+			(string) ( $assoc_args['cookie'] ?? '' ),
+			(string) ( $assoc_args['auth'] ?? '' )
+		);
+
+		if ( isset( $report['error'] ) ) {
+			WP_CLI::error( $report['error'] );
+		}
+
+		\WP_CLI\Utils\format_items( $assoc_args['format'] ?? 'table', $report['rows'], array( 'field', 'value' ) );
+
+		foreach ( $report['notes'] as $note ) {
+			WP_CLI::log( '- ' . $note );
+		}
+
+		if ( $report['cacheable'] ) {
+			WP_CLI::success( $report['summary'] );
+		} else {
+			WP_CLI::warning( $report['summary'] );
+		}
 	}
 
 	/**

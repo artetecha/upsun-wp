@@ -11,6 +11,7 @@
 
 namespace Upsun\Modules;
 
+use Upsun\CacheCheck;
 use Upsun\Environment;
 use Upsun\Module;
 use Upsun\ModuleRegistry;
@@ -433,6 +434,77 @@ class Dashboard implements Module {
 		echo '</tbody></table>';
 
 		echo '<p>' . esc_html__( 'The Upsun router cache has no purge API: cached pages expire by TTL or on redeploy.', 'upsun-mu-plugin' ) . '</p>';
+
+		$this->render_cache_check();
+	}
+
+	/**
+	 * The cache-check form and, when a URL was submitted, its verdict.
+	 * Read-only diagnostics (same engine as `wp upsun cache-check`), so a
+	 * nonce-gated GET back to this page keeps the result linkable.
+	 */
+	private function render_cache_check(): void {
+		$requested = isset( $_GET['upsun-cache-check'] ) ? trim( (string) $_GET['upsun-cache-check'] ) : '';
+
+		printf( '<form method="get" action="%s">', esc_url( admin_url( 'admin.php' ) ) );
+		printf( '<input type="hidden" name="page" value="%s">', esc_attr( self::MENU_SLUG ) );
+		wp_nonce_field( 'upsun-cache-check', '_upsun_cc_nonce', false );
+		printf(
+			'<p><input type="text" name="upsun-cache-check" class="regular-text" placeholder="%s" value="%s"> <button type="submit" class="button button-secondary">%s</button></p>',
+			esc_attr__( '/some/page or full URL', 'upsun-mu-plugin' ),
+			esc_attr( $requested ),
+			esc_html__( 'Check cacheability', 'upsun-mu-plugin' )
+		);
+		echo '</form>';
+
+		if ( '' === $requested
+			|| ! wp_verify_nonce( (string) ( $_GET['_upsun_cc_nonce'] ?? '' ), 'upsun-cache-check' ) ) {
+			return;
+		}
+
+		$resolved = CacheCheck::resolve_url( $requested );
+
+		if ( null === $resolved || ! CacheCheck::is_environment_url( $resolved ) ) {
+			echo '<p><strong>' . esc_html__( 'Only URLs on this environment\'s own routes can be checked here (a path like /courses/ works too).', 'upsun-mu-plugin' ) . '</strong></p>';
+
+			return;
+		}
+
+		$report = CacheCheck::run( $requested );
+
+		if ( isset( $report['error'] ) ) {
+			printf( '<p><strong>%s</strong> %s</p>', esc_html__( 'Check failed:', 'upsun-mu-plugin' ), esc_html( (string) $report['error'] ) );
+
+			return;
+		}
+
+		printf(
+			'<p><span style="color: %s; font-weight: 600;">&#9679;</span> <strong>%s</strong></p>',
+			esc_attr( $report['cacheable'] ? '#00a32a' : '#dba617' ),
+			esc_html( (string) $report['summary'] )
+		);
+
+		echo '<table class="widefat striped"><tbody>';
+
+		foreach ( $report['rows'] as $row ) {
+			printf(
+				'<tr><td>%s</td><td><code>%s</code></td></tr>',
+				esc_html( (string) $row['field'] ),
+				esc_html( (string) $row['value'] )
+			);
+		}
+
+		echo '</tbody></table>';
+
+		if ( array() !== $report['notes'] ) {
+			echo '<ul style="list-style: disc; margin-left: 1.2em;">';
+
+			foreach ( $report['notes'] as $note ) {
+				printf( '<li>%s</li>', esc_html( (string) $note ) );
+			}
+
+			echo '</ul>';
+		}
 	}
 
 	public function render_modules_panel(): void {

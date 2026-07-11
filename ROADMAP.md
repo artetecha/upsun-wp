@@ -7,8 +7,8 @@
 | v0.2 | Upsun dashboard page (`dashboard` module) | ✅ shipped in 0.2.0 (PR #44), verified on a preview env |
 | v0.2 | Cron heartbeat (`cron-heartbeat` module) | ✅ shipped in 0.2.1 (PR #45), `wp upsun doctor` verified live |
 | v0.2 | Login-screen environment banner | ✅ shipped in 0.2.1 (PR #45), verified on a preview env |
-| v0.2 | SafePreviews module + `wp upsun sanitize` | 🔄 implemented in 0.2.2; preview-env verification pending |
-| v0.2 | `wp upsun cache-check <url>` | ⬜ next up |
+| v0.2 | SafePreviews module + `wp upsun sanitize` | ✅ shipped in 0.2.2 (PR #46); dashboard restyle followed in 0.2.3 (PR #47) |
+| v0.2 | `wp upsun cache-check <url>` | 🔄 implemented in 0.2.4; preview-env verification pending |
 | v0.3 | Compat layer, `wp upsun migrate`, relationship health, mount usage | ⬜ not started |
 | — | Extraction to an independent repo | ⬜ triggered by second consumer or v0.3 |
 
@@ -129,21 +129,30 @@ because Stripe/FluentCRM are live there. Success criterion: with SafePreviews
 active, that warning can be deleted (FluentCRM specifics stay KEDS-side via the
 registry filter).
 
-### `wp upsun cache-check <url>`
+### `wp upsun cache-check <url>` — implemented in 0.2.4
 
 Self-service diagnosis of the #1 WordPress-on-Upsun support issue ("why isn't
-my page cached?"). Fetches the URL (optionally with `--cookie=` pairs) and
+my page cached?"). Fetches the URL (optionally with `--cookie`) and
 explains the verdict:
 
 - which request cookie matched a bypass pattern (and the pattern),
 - whether the response carried `Set-Cookie` (and which cookie — the thing that
   makes the router refuse to cache),
 - the emitted `Cache-Control` and effective s-maxage,
-- whether `DONOTCACHEPAGE`/prior no-cache headers spoiled it.
+- whether `DONOTCACHEPAGE`/prior no-cache headers spoiled it,
+- whether this fetch was a router HIT/MISS/BYPASS (`X-Platform-Cache`).
 
-Output: a table plus a one-line verdict (`cacheable for 600s` / `uncacheable:
-Set-Cookie lp_session_guest`). Documents (but cannot read) the router cookie
-allowlist — flag that as an assumption in output.
+Output: a table plus a one-line verdict (`cacheable for 600s (s-maxage)` /
+`uncacheable: Set-Cookie lp_session_guest`). As originally suspected, Upsun
+does not expose the routes' cache blocks in `PLATFORM_ROUTES` (verified
+live) — documented defaults are assumed and flagged "(assumed)", and
+consumers can mirror their real route cache config via the
+`upsun_cache_check_route_cache` filter to make the cookie notes exact.
+The tool reads the block if the platform ever starts exposing it. HTTP 401s
+are diagnosed as access control (with `--auth=<user:pass>` support for
+protected previews) rather than misattributed to the page. The same engine
+powers the interactive form in the dashboard Caching panel (restricted to
+the environment's own routes).
 
 ### Cron heartbeat — shipped in 0.2.1
 

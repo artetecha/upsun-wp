@@ -15,10 +15,11 @@ if ( defined( 'UPSUN_MU_PLUGIN_DIR' ) ) {
 }
 
 define( 'UPSUN_MU_PLUGIN_DIR', __DIR__ );
-define( 'UPSUN_MU_PLUGIN_VERSION', '0.2.3' );
+define( 'UPSUN_MU_PLUGIN_VERSION', '0.2.4' );
 
 require_once __DIR__ . '/src/Environment.php';
 require_once __DIR__ . '/src/helpers.php';
+require_once __DIR__ . '/src/CacheCheck.php';
 require_once __DIR__ . '/src/Module.php';
 require_once __DIR__ . '/src/ModuleRegistry.php';
 require_once __DIR__ . '/src/Modules/EnvironmentIndicator.php';

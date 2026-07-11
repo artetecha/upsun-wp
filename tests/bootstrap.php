@@ -72,6 +72,10 @@ function esc_html__( $text, $domain = null ) {
 	return $text;
 }
 
+function esc_attr__( $text, $domain = null ) {
+	return $text;
+}
+
 function esc_html( $text ) {
 	return (string) $text;
 }
@@ -106,6 +110,10 @@ function sanitize_key( $key ) {
 
 function wp_nonce_field( $action = -1, $name = '_wpnonce', $referer = true, $display = true ) {
 	echo '<input type="hidden" name="' . $name . '" value="test">';
+}
+
+function wp_verify_nonce( $nonce, $action = -1 ) {
+	return 'test' === $nonce;
 }
 
 function wp_using_ext_object_cache() {
@@ -206,6 +214,7 @@ function wp_is_writable( $path ) {
 
 require_once dirname( __DIR__ ) . '/src/Environment.php';
 require_once dirname( __DIR__ ) . '/src/helpers.php';
+require_once dirname( __DIR__ ) . '/src/CacheCheck.php';
 require_once dirname( __DIR__ ) . '/src/Module.php';
 require_once dirname( __DIR__ ) . '/src/ModuleRegistry.php';
 require_once dirname( __DIR__ ) . '/src/Modules/EnvironmentIndicator.php';
