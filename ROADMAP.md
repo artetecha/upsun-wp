@@ -12,8 +12,9 @@
 | v0.3 | Integrations architecture (`src/Integrations/`) | ✅ shipped in 0.3.0 (PR #49), verified on a preview env |
 | v0.3 | Writable-path advisor (`writable-paths` + `wp upsun mounts`) | ✅ shipped in 0.3.1 (PR #50), verified on a preview env |
 | v0.3 | Opt-in sanitizers (email/password anonymizers, deactivate-plugins, scrub-options) | ✅ shipped in 0.3.2 (PR #51), verified on a preview env |
-| v0.3 | Deploy migrations (`wp upsun migrate`) | 🔄 implemented in 0.3.3; preview-env verification pending |
+| v0.3 | Deploy migrations (`wp upsun migrate`) | ✅ shipped in 0.3.3 (PR #52), verified by two live preview deploys, KEDS runs on it |
 | v0.3 | Relationship health, mount usage | ⬜ not started |
+| v0.4 | Premium plugin vendoring toolkit (`wp upsun vendor`) | ⬜ planned |
 | — | Extraction to an independent repo | ⬜ triggered by second consumer or v0.3 |
 
 The v0.2 milestone spans 0.2.x releases; version = package `composer.json` /
@@ -299,6 +300,32 @@ rude way to discover a quota. Note: mounts share one disk — report per-mount
 ---
 
 ## v0.4+ / blocked on platform or demand
+
+### Premium plugin vendoring toolkit (`wp upsun vendor`)
+
+Read-only filesystems plus `DISALLOW_FILE_MODS` mean premium plugins cannot
+self-update, so every WP-on-Upsun project reinvents vendoring them as
+Composer path packages (KEDS: `private-packages/` + a source manifest +
+daily premium-update PRs). Three layers, two homes:
+
+- **In the plugin (this item)**: `wp upsun vendor <slug> [--to=<dir>]` —
+  export an installed plugin/theme as a Composer-ready package (a
+  `composer.json` generated from the plugin headers, source copied to a
+  writable target) — the step everyone does by hand when first onboarding a
+  premium plugin; and `wp upsun vendor --check-updates` — read the
+  `update_plugins`/`update_themes` transients and report pending premium
+  updates for vendored (non-registry) packages, joined to the shared check
+  registry so doctor/Site Health/the dashboard warn when vendored packages
+  fall behind.
+- **In the companion starter repo**: the repo-side pattern as documented
+  scaffolding — `private-packages/` layout, per-package composer.json
+  template, source manifest, example update workflow. Depends on the
+  extraction plan's starter repo.
+- **Consumer-side forever**: vendor-specific license/auth update automation
+  (ThimPress/Fluent/RevSlider flows) — per-vendor knowledge that may grow
+  into Integration classes on demand, like everything else plugin-specific.
+
+### Other
 
 - **Router cache purge** — blocked: the Upsun router exposes no purge API.
   Pre-ship the API surface as documented no-ops (`Upsun\purge_paths()`,
