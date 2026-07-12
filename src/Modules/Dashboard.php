@@ -13,6 +13,7 @@ namespace Upsun\Modules;
 
 use Upsun\CacheCheck;
 use Upsun\Environment;
+use Upsun\IntegrationRegistry;
 use Upsun\Module;
 use Upsun\ModuleRegistry;
 
@@ -534,6 +535,69 @@ class Dashboard implements Module {
 		}
 
 		echo '</tbody></table>';
+
+		$this->render_integrations();
+	}
+
+	/**
+	 * Third-party integrations: boot state plus whether the target plugin
+	 * is actually present (evaluated now, with plugins loaded).
+	 */
+	private function render_integrations(): void {
+		$status = IntegrationRegistry::status();
+
+		if ( array() === $status ) {
+			return;
+		}
+
+		echo '<h3>' . esc_html__( 'Integrations', 'upsun-mu-plugin' ) . '</h3>';
+		echo '<table class="widefat striped"><thead><tr>';
+
+		foreach ( array( __( 'Integration', 'upsun-mu-plugin' ), __( 'Status', 'upsun-mu-plugin' ), __( 'Target plugin', 'upsun-mu-plugin' ) ) as $heading ) {
+			printf( '<th>%s</th>', esc_html( $heading ) );
+		}
+
+		echo '</tr></thead><tbody>';
+
+		foreach ( $status as $id => $integration ) {
+			$instance = IntegrationRegistry::instance( (string) $id );
+
+			if ( null !== $instance ) {
+				$target = $instance->is_active()
+					? __( 'detected', 'upsun-mu-plugin' )
+					: __( 'not detected (contributions are dormant no-ops)', 'upsun-mu-plugin' );
+			} else {
+				$target = '—';
+			}
+
+			printf(
+				'<tr><td>%s</td><td>%s</td><td>%s</td></tr>',
+				esc_html( (string) $id ),
+				esc_html( $this->integration_state_label( $integration['state'], (string) $id ) ),
+				esc_html( $target )
+			);
+		}
+
+		echo '</tbody></table>';
+	}
+
+	private function integration_state_label( string $state, string $id ): string {
+		switch ( $state ) {
+			case 'loaded':
+				return __( 'loaded', 'upsun-mu-plugin' );
+			case 'constant':
+				return sprintf(
+					/* translators: %s: constant name. */
+					__( 'disabled by the %s constant', 'upsun-mu-plugin' ),
+					IntegrationRegistry::disable_constant_name( $id )
+				);
+			case 'filter':
+				return __( 'removed by the upsun_integrations filter', 'upsun-mu-plugin' );
+			case 'missing':
+				return __( 'class not found', 'upsun-mu-plugin' );
+			default:
+				return $state;
+		}
 	}
 
 	public function handle_flush_object_cache(): void {

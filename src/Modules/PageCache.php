@@ -20,8 +20,13 @@ class PageCache implements Module {
 
 	public const DEFAULT_TTL = 600;
 
+	/**
+	 * Core/session patterns only. Third-party patterns (e.g. WooCommerce's
+	 * session/cart cookies) are contributed by their Integrations classes
+	 * through the upsun_page_cache_bypass_cookie_patterns filter.
+	 */
 	public const DEFAULT_COOKIE_PATTERNS = array(
-		'/^(wordpress_|wp-postpass|wp_woocommerce_session_|woocommerce_|PHPSESSID|comment_author_)/',
+		'/^(wordpress_|wp-postpass|PHPSESSID|comment_author_)/',
 	);
 
 	public function should_load(): bool {
@@ -118,15 +123,11 @@ class PageCache implements Module {
 			return;
 		}
 
-		// Belt and braces for pages WooCommerce marks dynamic without
-		// DONOTCACHEPAGE. Other commerce/LMS plugins: use the skip filter.
-		if ( function_exists( 'is_cart' ) && ( is_cart() || is_checkout() || is_account_page() ) ) {
-			return;
-		}
-
 		/**
 		 * Filters whether to skip cache headers for this request. Use for
-		 * plugin-specific dynamic pages (LMS checkout/profile, etc.).
+		 * plugin-specific dynamic pages (LMS checkout/profile, etc.);
+		 * built-in Integrations contribute here too (e.g. WooCommerce
+		 * cart/checkout/account pages).
 		 *
 		 * @param bool $skip Default false.
 		 */

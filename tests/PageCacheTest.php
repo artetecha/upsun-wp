@@ -5,6 +5,18 @@ use Upsun\Modules\PageCache;
 
 final class PageCacheTest extends TestCase {
 
+	/**
+	 * Core defaults plus the WooCommerce integration's contribution — the
+	 * effective pattern set on a booted site, matching the pre-0.3.0
+	 * built-in defaults.
+	 */
+	private function effective_patterns(): array {
+		return array_merge(
+			PageCache::DEFAULT_COOKIE_PATTERNS,
+			\Upsun\Integrations\WooCommerce::COOKIE_PATTERNS
+		);
+	}
+
 	private function cacheable( array $overrides = array(), ?array $patterns = null ): bool {
 		$context = array_merge(
 			array(
@@ -16,7 +28,48 @@ final class PageCacheTest extends TestCase {
 			$overrides
 		);
 
-		return PageCache::is_cacheable_request( $context, $patterns ?? PageCache::DEFAULT_COOKIE_PATTERNS );
+		return PageCache::is_cacheable_request( $context, $patterns ?? $this->effective_patterns() );
+	}
+
+	/**
+	 * 0.3.0 split the single built-in regex into core defaults plus the
+	 * WooCommerce integration's patterns; the combined coverage must equal
+	 * the pre-split regex exactly.
+	 */
+	public function test_pattern_split_matches_the_pre_integration_defaults(): void {
+		$pre_split_oracle = '/^(wordpress_|wp-postpass|wp_woocommerce_session_|woocommerce_|PHPSESSID|comment_author_)/';
+
+		$samples = array(
+			'wordpress_logged_in_abc',
+			'wordpress_sec_abc',
+			'wp-postpass_abc',
+			'wp_woocommerce_session_abc',
+			'woocommerce_items_in_cart',
+			'woocommerce_cart_hash',
+			'PHPSESSID',
+			'comment_author_abc',
+			'_ga',
+			'consent_choice',
+			'wp_settings_time',
+			'harmless',
+		);
+
+		foreach ( $samples as $cookie ) {
+			$matches_new = false;
+
+			foreach ( $this->effective_patterns() as $pattern ) {
+				if ( preg_match( $pattern, $cookie ) ) {
+					$matches_new = true;
+					break;
+				}
+			}
+
+			$this->assertSame(
+				1 === preg_match( $pre_split_oracle, $cookie ),
+				$matches_new,
+				"coverage parity for {$cookie}"
+			);
+		}
 	}
 
 	public function test_plain_anonymous_get_is_cacheable(): void {

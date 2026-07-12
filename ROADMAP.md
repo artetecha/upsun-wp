@@ -1,6 +1,6 @@
 # Roadmap
 
-## Status (2026-07-10)
+## Status (2026-07-12)
 
 | Milestone | Item | Status |
 |---|---|---|
@@ -8,8 +8,9 @@
 | v0.2 | Cron heartbeat (`cron-heartbeat` module) | ✅ shipped in 0.2.1 (PR #45), `wp upsun doctor` verified live |
 | v0.2 | Login-screen environment banner | ✅ shipped in 0.2.1 (PR #45), verified on a preview env |
 | v0.2 | SafePreviews module + `wp upsun sanitize` | ✅ shipped in 0.2.2 (PR #46); dashboard restyle followed in 0.2.3 (PR #47) |
-| v0.2 | `wp upsun cache-check <url>` | 🔄 implemented in 0.2.4; preview-env verification pending |
-| v0.3 | Compat layer, `wp upsun migrate`, relationship health, mount usage | ⬜ not started |
+| v0.2 | `wp upsun cache-check <url>` | ✅ shipped in 0.2.4 (PR #48), verified live — **v0.2 milestone complete** |
+| v0.3 | Integrations architecture (`src/Integrations/`) | 🔄 implemented in 0.3.0; pure refactor, no behavior change |
+| v0.3 | Opt-in sanitizers, compat layer, `wp upsun migrate`, relationship health, mount usage | ⬜ not started |
 | — | Extraction to an independent repo | ⬜ triggered by second consumer or v0.3 |
 
 The v0.2 milestone spans 0.2.x releases; version = package `composer.json` /
@@ -176,7 +177,25 @@ in; this protects them at the door. Opt out via `upsun_login_banner`.
 
 For adoption beyond the first customer.
 
-### Built-in sanitizers (opt-in, disabled by default)
+### Integrations architecture — implemented in 0.3.0
+
+The opening move of v0.3, a pure refactor: everything the plugin knows about
+one specific third-party plugin lives in a dedicated class under
+`src/Integrations/` (launch set: `woocommerce`, `woocommerce-stripe`),
+booted by an `IntegrationRegistry` mirroring the module registry
+(`upsun_integrations` filter, `UPSUN_DISABLE_INTEGRATION_*` constants,
+status in the dashboard Modules panel with target-plugin detection).
+
+The load-bearing rule: **integrations contribute exclusively through the
+public filter API consumers use** — bypass-cookie patterns, page-cache
+skips, SafePreviews protections. If a built-in integration can't express
+something through the public API, a consumer couldn't either; permanent
+dogfooding. Integrations boot before modules at `muplugins_loaded` 0 and
+contribute at filter priority 5, so consumer filters (default 10) still
+override. Behavior is byte-identical to 0.2.4 (pattern-coverage parity is
+pinned by a test); every feature below that touches a specific plugin
+(compat fixes, `deactivate-plugins` targets, gateway sanitizers) lands as
+an integration, not as inline knowledge in a concern module.
 
 SafePreviews' `upsun_preview_sanitize` hook currently fires into consumer
 code only; the built-in protections are runtime filters that never write to

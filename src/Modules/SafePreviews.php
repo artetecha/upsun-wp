@@ -8,6 +8,10 @@
  * writes, so the cloned data stays untouched) and detects fresh clones via
  * an environment-name stamp so consumers can run one-time sanitize actions.
  *
+ * Built in here: the plugin-agnostic mail protection and the sanitize
+ * machinery. Plugin-specific protections live in src/Integrations/ and join
+ * through the upsun_safe_previews_actions filter.
+ *
  * On production the module only maintains the stamp: the clone carries the
  * parent's stamp, and the mismatch with the clone's own environment name is
  * exactly what makes a fresh clone detectable.
@@ -84,30 +88,26 @@ class SafePreviews implements Module {
 	 * 'detail' => string ] — inactive means the target plugin is absent,
 	 * off means a consumer filter disabled the protection.
 	 *
+	 * Only the plugin-agnostic mail protection is built in here;
+	 * plugin-specific protections (WooCommerce webhooks, WooCommerce Stripe
+	 * test mode) are contributed by their Integrations classes through the
+	 * same filter consumers use.
+	 *
 	 * @return array<string, array{label: string, register: callable, status: callable}>
 	 */
 	public function protections(): array {
 		$protections = array(
-			'mail'                 => array(
+			'mail' => array(
 				'label'    => __( 'Outbound mail', 'upsun-mu-plugin' ),
 				'register' => array( $this, 'register_mail_protection' ),
 				'status'   => array( $this, 'mail_status' ),
 			),
-			'woocommerce-stripe'   => array(
-				'label'    => __( 'WooCommerce Stripe', 'upsun-mu-plugin' ),
-				'register' => array( $this, 'register_stripe_protection' ),
-				'status'   => array( $this, 'stripe_status' ),
-			),
-			'woocommerce-webhooks' => array(
-				'label'    => __( 'WooCommerce webhooks', 'upsun-mu-plugin' ),
-				'register' => array( $this, 'register_webhook_protection' ),
-				'status'   => array( $this, 'webhook_status' ),
-			),
 		);
 
 		/**
-		 * Filters the preview protection registry. Consumers add entries for
-		 * their own integrations (CRMs, other gateways) or remove built-ins.
+		 * Filters the preview protection registry. Built-in Integrations and
+		 * consumers add entries for specific plugins (gateways, CRMs) or
+		 * remove existing ones.
 		 *
 		 * @param array $protections id => [ 'label', 'register', 'status' ].
 		 */
@@ -265,119 +265,6 @@ class SafePreviews implements Module {
 		update_option( self::MAIL_LOG_OPTION, array_slice( $log, 0, self::MAIL_LOG_MAX ), false );
 
 		error_log( sprintf( '[upsun-mu-plugin] Intercepted wp_mail on preview environment: to=%s subject=%s', $to, (string) ( $atts['subject'] ?? '' ) ) );
-	}
-
-	/* ---------------------------------------------------------------------
-	 * WooCommerce Stripe.
-	 * ------------------------------------------------------------------- */
-
-	public function register_stripe_protection(): void {
-		add_filter( 'option_woocommerce_stripe_settings', array( $this, 'force_stripe_test_mode' ) );
-	}
-
-	/**
-	 * Force the gateway into test mode at read time. The cloned live keys
-	 * stay in the database untouched; if no test keys are configured the
-	 * gateway simply becomes unavailable, which is the safe outcome.
-	 *
-	 * @param mixed $settings The woocommerce_stripe_settings option value.
-	 * @return mixed
-	 */
-	public function force_stripe_test_mode( $settings ) {
-		if ( ! is_array( $settings ) || ! $this->stripe_test_mode_forced() ) {
-			return $settings;
-		}
-
-		$settings['testmode'] = 'yes';
-
-		return $settings;
-	}
-
-	/**
-	 * @return array{state: string, detail: string}
-	 */
-	public function stripe_status(): array {
-		if ( ! $this->stripe_test_mode_forced() ) {
-			return array(
-				'state'  => 'off',
-				'detail' => __( 'not forced (upsun_safe_previews_stripe_test_mode filter)', 'upsun-mu-plugin' ),
-			);
-		}
-
-		if ( ! class_exists( 'WC_Stripe' ) ) {
-			return array(
-				'state'  => 'inactive',
-				'detail' => __( 'WooCommerce Stripe not detected', 'upsun-mu-plugin' ),
-			);
-		}
-
-		return array(
-			'state'  => 'active',
-			'detail' => __( 'test mode forced at runtime (live keys unused)', 'upsun-mu-plugin' ),
-		);
-	}
-
-	private function stripe_test_mode_forced(): bool {
-		/**
-		 * Filters whether WooCommerce Stripe is forced into test mode on
-		 * previews.
-		 *
-		 * @param bool $forced Default true.
-		 */
-		return (bool) apply_filters( 'upsun_safe_previews_stripe_test_mode', true );
-	}
-
-	/* ---------------------------------------------------------------------
-	 * WooCommerce webhooks.
-	 * ------------------------------------------------------------------- */
-
-	public function register_webhook_protection(): void {
-		add_filter( 'woocommerce_webhook_should_deliver', array( $this, 'maybe_pause_webhook' ), PHP_INT_MAX );
-	}
-
-	/**
-	 * Short-circuit webhook delivery; the webhooks keep their active status
-	 * in the database, so nothing can sync back wrong.
-	 *
-	 * @param mixed $should_deliver
-	 * @return mixed
-	 */
-	public function maybe_pause_webhook( $should_deliver ) {
-		return $this->webhooks_paused() ? false : $should_deliver;
-	}
-
-	/**
-	 * @return array{state: string, detail: string}
-	 */
-	public function webhook_status(): array {
-		if ( ! $this->webhooks_paused() ) {
-			return array(
-				'state'  => 'off',
-				'detail' => __( 'not paused (upsun_safe_previews_pause_webhooks filter)', 'upsun-mu-plugin' ),
-			);
-		}
-
-		if ( ! class_exists( 'WC_Webhook' ) ) {
-			return array(
-				'state'  => 'inactive',
-				'detail' => __( 'WooCommerce not detected', 'upsun-mu-plugin' ),
-			);
-		}
-
-		return array(
-			'state'  => 'active',
-			'detail' => __( 'deliveries paused (statuses untouched)', 'upsun-mu-plugin' ),
-		);
-	}
-
-	private function webhooks_paused(): bool {
-		/**
-		 * Filters whether WooCommerce webhook deliveries are paused on
-		 * previews.
-		 *
-		 * @param bool $paused Default true.
-		 */
-		return (bool) apply_filters( 'upsun_safe_previews_pause_webhooks', true );
 	}
 
 	/* ---------------------------------------------------------------------

@@ -15,13 +15,17 @@ if ( defined( 'UPSUN_MU_PLUGIN_DIR' ) ) {
 }
 
 define( 'UPSUN_MU_PLUGIN_DIR', __DIR__ );
-define( 'UPSUN_MU_PLUGIN_VERSION', '0.2.4' );
+define( 'UPSUN_MU_PLUGIN_VERSION', '0.3.0' );
 
 require_once __DIR__ . '/src/Environment.php';
 require_once __DIR__ . '/src/helpers.php';
 require_once __DIR__ . '/src/CacheCheck.php';
 require_once __DIR__ . '/src/Module.php';
 require_once __DIR__ . '/src/ModuleRegistry.php';
+require_once __DIR__ . '/src/Integration.php';
+require_once __DIR__ . '/src/IntegrationRegistry.php';
+require_once __DIR__ . '/src/Integrations/WooCommerce.php';
+require_once __DIR__ . '/src/Integrations/WooCommerceStripe.php';
 require_once __DIR__ . '/src/Modules/EnvironmentIndicator.php';
 require_once __DIR__ . '/src/Modules/PageCache.php';
 require_once __DIR__ . '/src/Modules/UpdatesPolicy.php';
@@ -39,4 +43,7 @@ if ( defined( 'WP_CLI' ) && WP_CLI ) {
 	\WP_CLI::add_command( 'upsun', \Upsun\Cli\UpsunCommand::class );
 }
 
+// Integrations boot first (same hook and priority, registered earlier) so
+// their filter contributions are in place when the modules read them.
+add_action( 'muplugins_loaded', array( \Upsun\IntegrationRegistry::class, 'boot' ), 0 );
 add_action( 'muplugins_loaded', array( \Upsun\ModuleRegistry::class, 'boot' ), 0 );

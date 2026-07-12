@@ -160,38 +160,6 @@ final class SafePreviewsTest extends TestCase {
 		$this->assertStringContainsString( "From: KEDS <noreply@example.com>\r\nX-Upsun-Original-To: one@example.com", $atts['headers'] );
 	}
 
-	/* WooCommerce Stripe. */
-
-	public function test_stripe_settings_forced_into_test_mode(): void {
-		$settings = ( new SafePreviews() )->force_stripe_test_mode( array( 'testmode' => 'no' ) );
-
-		$this->assertSame( 'yes', $settings['testmode'] );
-	}
-
-	public function test_stripe_non_array_settings_pass_through(): void {
-		$this->assertFalse( ( new SafePreviews() )->force_stripe_test_mode( false ) );
-	}
-
-	public function test_stripe_forcing_can_be_opted_out(): void {
-		add_filter( 'upsun_safe_previews_stripe_test_mode', '__return_false' );
-
-		$settings = ( new SafePreviews() )->force_stripe_test_mode( array( 'testmode' => 'no' ) );
-
-		$this->assertSame( 'no', $settings['testmode'] );
-	}
-
-	/* WooCommerce webhooks. */
-
-	public function test_webhook_delivery_paused(): void {
-		$this->assertFalse( ( new SafePreviews() )->maybe_pause_webhook( true ) );
-	}
-
-	public function test_webhook_pause_can_be_opted_out(): void {
-		add_filter( 'upsun_safe_previews_pause_webhooks', '__return_false' );
-
-		$this->assertTrue( ( new SafePreviews() )->maybe_pause_webhook( true ) );
-	}
-
 	/* Fresh-clone detection. */
 
 	public function test_fresh_clone_fires_sanitize_once_and_restamps(): void {
@@ -260,7 +228,7 @@ final class SafePreviewsTest extends TestCase {
 					'register' => '__return_true',
 					'status'   => '__return_true',
 				);
-				unset( $protections['woocommerce-webhooks'] );
+				unset( $protections['mail'] );
 
 				return $protections;
 			}
@@ -269,8 +237,7 @@ final class SafePreviewsTest extends TestCase {
 		$protections = ( new SafePreviews() )->protections();
 
 		$this->assertArrayHasKey( 'fluentcrm', $protections );
-		$this->assertArrayNotHasKey( 'woocommerce-webhooks', $protections );
-		$this->assertArrayHasKey( 'mail', $protections );
+		$this->assertArrayNotHasKey( 'mail', $protections );
 	}
 
 	public function test_register_joins_check_and_panel_registries(): void {

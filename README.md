@@ -55,14 +55,37 @@ Skipping this step does **not** weaken the runtime preview protections (mail int
 | Module | What it does |
 |---|---|
 | `environment-indicator` | Color-coded admin-bar badge (branch · environment type) with an Upsun Console link, a dashboard widget with environment metadata, and a matching banner on the login screen. |
-| `page-cache` | Emits `Cache-Control: public, max-age=0, s-maxage={ttl}` on anonymous, session-free page views so the Upsun router can cache them; optionally strips configured Set-Cookie headers (e.g. LMS guest sessions) to keep responses cacheable. `wp upsun cache-check <url>` (also a form in the dashboard Caching panel) explains any page's verdict: effective TTL, Set-Cookie spoilers, bypass-pattern matches, the route cookie allowlist (declared via `upsun_cache_check_route_cache` — Upsun does not expose it at runtime), and whether the fetch was a router HIT/MISS/BYPASS. |
+| `page-cache` | Emits `Cache-Control: public, max-age=0, s-maxage={ttl}` on anonymous, session-free page views so the Upsun router can cache them; optionally strips configured Set-Cookie headers (e.g. LMS guest sessions) to keep responses cacheable. Built-in bypass patterns cover core session cookies; commerce patterns come from the Integrations layer. `wp upsun cache-check <url>` (also a form in the dashboard Caching panel) explains any page's verdict: effective TTL, Set-Cookie spoilers, bypass-pattern matches, the route cookie allowlist (declared via `upsun_cache_check_route_cache` — Upsun does not expose it at runtime), and whether the fetch was a router HIT/MISS/BYPASS. |
 | `updates-policy` | Disables the in-app auto-update machinery (the filesystem is read-only; Composer is the update path), replaces the auto-update toggles with a note, and removes the core Site Health tests that would fail by design. |
 | `site-health` | Upsun-specific Site Health checks: object cache round-trip, cron configuration, writable mounts, preview search visibility; plus an "Upsun" section in the Info tab. |
 | `preview-protection` | Sends `X-Robots-Tag: noindex, nofollow` and robots meta on non-production environments, without touching the `blog_public` option (the database is a production clone). |
 | `smtp` | Points PHPMailer at the on-platform relay (`PLATFORM_SMTP_HOST`, port 25) unless a mailer plugin already configured SMTP. |
 | `dashboard` | A top-level "Upsun" page in wp-admin (`manage_options`) styled like the WP Dashboard: panels are real meta boxes in the core dashboard grid — collapsible, draggable between columns, layout persisted per user. Panels: environment, services (credentials never rendered), health checks, resolved caching config, module status; plus operational actions (flush object cache). Extensible via `upsun_dashboard_panels`; deliberately actions-not-settings — configuration stays in code. |
 | `cron-heartbeat` | Proves cron *executes*, not just that it is configured: schedules a recurring event that stamps a timestamp option, and reports staleness (plus overdue-event counts) through Site Health, the dashboard, and `wp upsun doctor`. |
-| `safe-previews` | Neuters live outbound integrations on preview clones, runtime-only (never DB writes): intercepts `wp_mail` (or redirects it), forces WooCommerce Stripe into test mode, pauses WooCommerce webhook deliveries. Fresh clones and data syncs are detected via an environment stamp and sanitized by `wp upsun sanitize --if-needed` in the post_deploy hook (installation step 3), which fires `upsun_preview_sanitize` so consumers can scrub their own integrations; registry extensible via `upsun_safe_previews_actions`. Adds a "Preview safety" health check and dashboard panel that warn when the hook wiring is missing. |
+| `safe-previews` | Neuters live outbound integrations on preview clones, runtime-only (never DB writes): intercepts `wp_mail` (or redirects it) built-in; the WooCommerce integrations contribute Stripe test-mode forcing and webhook pausing through the same registry. Fresh clones and data syncs are detected via an environment stamp and sanitized by `wp upsun sanitize --if-needed` in the post_deploy hook (installation step 3), which fires `upsun_preview_sanitize` so consumers can scrub their own integrations; registry extensible via `upsun_safe_previews_actions`. Adds a "Preview safety" health check and dashboard panel that warn when the hook wiring is missing. |
+
+## Integrations
+
+Everything the plugin knows about one specific third-party plugin lives in a
+dedicated class under `src/Integrations/` — the single place to answer "what
+does this plugin do about X?". Integrations contribute **exclusively through
+the same public filters consumers use** (never privileged internal calls), so
+every built-in integration doubles as proof the public API is sufficient.
+They register at `muplugins_loaded` before regular plugins load; every
+contribution is a dormant no-op when its target plugin is absent, and the
+dashboard's Modules panel reports each integration's boot state plus whether
+the target was detected.
+
+| Integration | Target | Contributions |
+|---|---|---|
+| `woocommerce` | WooCommerce | Session/cart cookies as page-cache bypass patterns; cart/checkout/account pages as page-cache skips; webhook-delivery pause as a SafePreviews protection. |
+| `woocommerce-stripe` | WooCommerce Stripe gateway | Test mode forced at option-read time on previews as a SafePreviews protection (cloned live keys stay untouched and unused). |
+
+Toggles mirror modules: the `upsun_integrations` filter, or
+`UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE` / `UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE_STRIPE`
+constants. To support a plugin the package doesn't know, use the public
+filters directly from your own mu-plugin — that is exactly what the built-in
+integrations do.
 
 ## Configuration
 
@@ -70,7 +93,8 @@ Skipping this step does **not** weaken the runtime preview protections (mail int
 
 - `UPSUN_MU_DISABLE` — kill switch for the whole plugin.
 - `UPSUN_DISABLE_ENVIRONMENT_INDICATOR`, `UPSUN_DISABLE_PAGE_CACHE`, `UPSUN_DISABLE_UPDATES_POLICY`, `UPSUN_DISABLE_SITE_HEALTH`, `UPSUN_DISABLE_PREVIEW_PROTECTION`, `UPSUN_DISABLE_SMTP`, `UPSUN_DISABLE_DASHBOARD`, `UPSUN_DISABLE_CRON_HEARTBEAT`, `UPSUN_DISABLE_SAFE_PREVIEWS` — per-module switches.
-- `UPSUN_MU_FORCE` — boot modules off-platform (testing against faked `PLATFORM_*` variables).
+- `UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE`, `UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE_STRIPE` — per-integration switches.
+- `UPSUN_MU_FORCE` — boot modules and integrations off-platform (testing against faked `PLATFORM_*` variables).
 
 ### Filters
 
@@ -79,6 +103,7 @@ Module boot is deferred to `muplugins_loaded` priority 0, so **any mu-plugin** c
 | Filter | Type | Default | Purpose |
 |---|---|---|---|
 | `upsun_mu_modules` | `array<string, class-string>` | all modules | Add/remove/replace modules. |
+| `upsun_integrations` | `array<string, class-string>` | all integrations | Add/remove/replace third-party plugin integrations. |
 | `upsun_page_cache_ttl` | `int` | `600` | Shared-cache TTL in seconds; `<= 0` disables the header. |
 | `upsun_page_cache_bypass_cookie_patterns` | `string[]` | WP/Woo/session regexes | Cookie names that mark a request personalised. |
 | `upsun_page_cache_strip_cookies` | `string[]` | `[]` | Cookie-name prefixes whose Set-Cookie headers are stripped from anonymous responses. |
