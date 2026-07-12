@@ -62,6 +62,7 @@ Skipping this step does **not** weaken the runtime preview protections (mail int
 | `smtp` | Points PHPMailer at the on-platform relay (`PLATFORM_SMTP_HOST`, port 25) unless a mailer plugin already configured SMTP. |
 | `dashboard` | A top-level "Upsun" page in wp-admin (`manage_options`) styled like the WP Dashboard: panels are real meta boxes in the core dashboard grid — collapsible, draggable between columns, layout persisted per user. Panels: environment, services (credentials never rendered), health checks, resolved caching config, module status; plus operational actions (flush object cache). Extensible via `upsun_dashboard_panels`; deliberately actions-not-settings — configuration stays in code. |
 | `cron-heartbeat` | Proves cron *executes*, not just that it is configured: schedules a recurring event that stamps a timestamp option, and reports staleness (plus overdue-event counts) through Site Health, the dashboard, and `wp upsun doctor`. |
+| `writable-paths` | Advises on the writable-path needs of known plugins: Integrations declare where plugins write, the check compares that against the mounts declared in `PLATFORM_APPLICATION`, and `wp upsun mounts` prints ready-to-paste mount YAML for anything missing. Advisory-only by design — on Upsun the fix is a mount, not a runtime path redirection. |
 | `safe-previews` | Neuters live outbound integrations on preview clones, runtime-only (never DB writes): intercepts `wp_mail` (or redirects it) built-in; the WooCommerce integrations contribute Stripe test-mode forcing and webhook pausing through the same registry. Fresh clones and data syncs are detected via an environment stamp and sanitized by `wp upsun sanitize --if-needed` in the post_deploy hook (installation step 3), which fires `upsun_preview_sanitize` so consumers can scrub their own integrations; registry extensible via `upsun_safe_previews_actions`. Adds a "Preview safety" health check and dashboard panel that warn when the hook wiring is missing. |
 
 ## Integrations
@@ -80,10 +81,13 @@ the target was detected.
 |---|---|---|
 | `woocommerce` | WooCommerce | Session/cart cookies as page-cache bypass patterns; cart/checkout/account pages as page-cache skips; webhook-delivery pause as a SafePreviews protection. |
 | `woocommerce-stripe` | WooCommerce Stripe gateway | Test mode forced at option-read time on previews as a SafePreviews protection (cloned live keys stay untouched and unused). |
+| `wordfence` | Wordfence | Advisory: declares `wp-content/wflogs` as a writable-path requirement. |
+| `updraftplus` | UpdraftPlus | Advisory: declares `wp-content/updraft` as a writable-path requirement. |
+| `wp-rocket` | WP Rocket | Advisory: declares `wp-content/cache` and `wp-content/wp-rocket-config`; notes the `advanced-cache.php` root drop-in (not mountable — copy at build time). |
 
 Toggles mirror modules: the `upsun_integrations` filter, or
-`UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE` / `UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE_STRIPE`
-constants. To support a plugin the package doesn't know, use the public
+`UPSUN_DISABLE_INTEGRATION_{ID}` constants (e.g.
+`UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE`, `UPSUN_DISABLE_INTEGRATION_WP_ROCKET`). To support a plugin the package doesn't know, use the public
 filters directly from your own mu-plugin — that is exactly what the built-in
 integrations do.
 
@@ -92,7 +96,7 @@ integrations do.
 ### Constants (wp-config friendly)
 
 - `UPSUN_MU_DISABLE` — kill switch for the whole plugin.
-- `UPSUN_DISABLE_ENVIRONMENT_INDICATOR`, `UPSUN_DISABLE_PAGE_CACHE`, `UPSUN_DISABLE_UPDATES_POLICY`, `UPSUN_DISABLE_SITE_HEALTH`, `UPSUN_DISABLE_PREVIEW_PROTECTION`, `UPSUN_DISABLE_SMTP`, `UPSUN_DISABLE_DASHBOARD`, `UPSUN_DISABLE_CRON_HEARTBEAT`, `UPSUN_DISABLE_SAFE_PREVIEWS` — per-module switches.
+- `UPSUN_DISABLE_ENVIRONMENT_INDICATOR`, `UPSUN_DISABLE_PAGE_CACHE`, `UPSUN_DISABLE_UPDATES_POLICY`, `UPSUN_DISABLE_SITE_HEALTH`, `UPSUN_DISABLE_PREVIEW_PROTECTION`, `UPSUN_DISABLE_SMTP`, `UPSUN_DISABLE_DASHBOARD`, `UPSUN_DISABLE_CRON_HEARTBEAT`, `UPSUN_DISABLE_SAFE_PREVIEWS`, `UPSUN_DISABLE_WRITABLE_PATHS` — per-module switches.
 - `UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE`, `UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE_STRIPE` — per-integration switches.
 - `UPSUN_MU_FORCE` — boot modules and integrations off-platform (testing against faked `PLATFORM_*` variables).
 
@@ -128,6 +132,8 @@ Module boot is deferred to `muplugins_loaded` priority 0, so **any mu-plugin** c
 | `upsun_safe_previews_actions` | `array<string, {label, register, status}>` | 3 built-in protections | Add protections for your own integrations (CRMs, other gateways) or remove built-ins. `register` runs at `muplugins_loaded` on previews; `status` at render time. |
 | `upsun_safe_previews_boot_check` | `bool` | `false` | Fallback for projects that cannot edit their hooks: check the environment stamp on every boot and sanitize inline when it is stale. Prefer the post_deploy hook. |
 | `upsun_cache_check_route_cache` | `array{enabled, default_ttl, cookies, known}` | documented router defaults | Mirror your route's cache block from `.upsun/config.yaml` (set `known: true`) so `wp upsun cache-check` reports your real cookie allowlist — Upsun does not expose it at runtime. |
+| `upsun_writable_paths_enabled` | `bool` | `true` | Disable the writable-path advisor check. |
+| `upsun_writable_path_requirements` | `array<string, {label, active, paths, note?}>` | contributed by Integrations | Declare where a plugin writes (paths relative to wp-content; `active` evaluated at check time). The check and `wp upsun mounts` do the rest. |
 
 ### Actions
 
@@ -149,6 +155,7 @@ wp upsun cache flush     # object cache only — the router cache has no purge A
 wp upsun cache-check /some/page          # why is/isn't this page router-cacheable?
 wp upsun cache-check / --cookie="a=1"    # ...and what do these request cookies change?
 wp upsun cache-check / --auth=user:pass  # for previews behind HTTP access control
+wp upsun mounts          # declared mounts + ready-to-paste YAML for missing ones
 wp upsun sanitize        # fire the preview sanitize actions (refuses on production)
 wp upsun sanitize --if-needed   # post_deploy-hook mode: stamp-aware, safe everywhere
 wp upsun sanitize --dry-run

@@ -15,7 +15,7 @@ if ( defined( 'UPSUN_MU_PLUGIN_DIR' ) ) {
 }
 
 define( 'UPSUN_MU_PLUGIN_DIR', __DIR__ );
-define( 'UPSUN_MU_PLUGIN_VERSION', '0.3.0' );
+define( 'UPSUN_MU_PLUGIN_VERSION', '0.3.1' );
 
 require_once __DIR__ . '/src/Environment.php';
 require_once __DIR__ . '/src/helpers.php';
@@ -26,6 +26,9 @@ require_once __DIR__ . '/src/Integration.php';
 require_once __DIR__ . '/src/IntegrationRegistry.php';
 require_once __DIR__ . '/src/Integrations/WooCommerce.php';
 require_once __DIR__ . '/src/Integrations/WooCommerceStripe.php';
+require_once __DIR__ . '/src/Integrations/Wordfence.php';
+require_once __DIR__ . '/src/Integrations/UpdraftPlus.php';
+require_once __DIR__ . '/src/Integrations/WpRocket.php';
 require_once __DIR__ . '/src/Modules/EnvironmentIndicator.php';
 require_once __DIR__ . '/src/Modules/PageCache.php';
 require_once __DIR__ . '/src/Modules/UpdatesPolicy.php';
@@ -35,6 +38,7 @@ require_once __DIR__ . '/src/Modules/Smtp.php';
 require_once __DIR__ . '/src/Modules/Dashboard.php';
 require_once __DIR__ . '/src/Modules/CronHeartbeat.php';
 require_once __DIR__ . '/src/Modules/SafePreviews.php';
+require_once __DIR__ . '/src/Modules/WritablePaths.php';
 
 // The CLI command exists even off-platform so `wp upsun info` can report
 // "Not running on Upsun" instead of erroring in local/CI environments.

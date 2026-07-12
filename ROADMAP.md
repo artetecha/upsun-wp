@@ -9,8 +9,9 @@
 | v0.2 | Login-screen environment banner | ✅ shipped in 0.2.1 (PR #45), verified on a preview env |
 | v0.2 | SafePreviews module + `wp upsun sanitize` | ✅ shipped in 0.2.2 (PR #46); dashboard restyle followed in 0.2.3 (PR #47) |
 | v0.2 | `wp upsun cache-check <url>` | ✅ shipped in 0.2.4 (PR #48), verified live — **v0.2 milestone complete** |
-| v0.3 | Integrations architecture (`src/Integrations/`) | 🔄 implemented in 0.3.0; pure refactor, no behavior change |
-| v0.3 | Opt-in sanitizers, compat layer, `wp upsun migrate`, relationship health, mount usage | ⬜ not started |
+| v0.3 | Integrations architecture (`src/Integrations/`) | ✅ shipped in 0.3.0 (PR #49), verified on a preview env |
+| v0.3 | Writable-path advisor (`writable-paths` + `wp upsun mounts`) | 🔄 implemented in 0.3.1; preview-env verification pending |
+| v0.3 | Opt-in sanitizers, `wp upsun migrate`, relationship health, mount usage | ⬜ not started |
 | — | Extraction to an independent repo | ⬜ triggered by second consumer or v0.3 |
 
 The v0.2 milestone spans 0.2.x releases; version = package `composer.json` /
@@ -222,15 +223,32 @@ through `wp upsun sanitize`, the dashboard panel, and doctor):
   credentials in ways runtime filters cannot reach (the LearnPress
   settings-cache problem, generalized).
 
-### Read-only-FS compat layer
+### Writable-path advisor (`writable-paths`) — implemented in 0.3.1
 
-A registry of targeted fixes for popular plugins that assume writable
-`wp-content` (cache/log/backup writers: WP Rocket, Wordfence, UpdraftPlus, …):
-redirect their paths into the writable mounts, suppress their permission nags.
-Ship the *framework* (each fix = slug + `is_active()` + `apply()`, extensible
-via `upsun_compat_fixes`) with 2–3 proven fixes; grow the registry from real
-adoption reports. This is pantheon-mu-plugin's most-loved feature and matters
-more for generic adoption than anything else in v0.3.
+Reshaped from the originally planned "read-only-FS compat layer" (a
+pantheon-mu-plugin port) after realizing the premise doesn't transfer:
+Pantheon has a *fixed* set of writable paths, so redirecting plugin
+cache/log/backup paths into uploads is the only fix available there. On
+Upsun, writable directories are user-declared mounts — the platform-native
+fix is three lines of YAML, and runtime path redirection would paper over
+what config should express ("honest about the platform"). What actually
+remains is a discovery problem plus two residual gaps:
+
+- **The advisor**: Integrations declare where known plugins write
+  (`upsun_writable_path_requirements` registry); the `writable_paths` check
+  compares that against the mounts declared in `PLATFORM_APPLICATION` and
+  warns naming the missing directories; `wp upsun mounts` lists the declared
+  mounts and prints ready-to-paste mount YAML for anything not covered.
+  Launch registry: Wordfence (`wflogs`), UpdraftPlus (`updraft`), WP Rocket
+  (`cache`, `wp-rocket-config`). Grows from real adoption reports.
+- **Residual gap 1 — wp-content-root drop-ins** (`advanced-cache.php` and
+  friends) cannot be mounts: mounting wp-content root would shadow deployed
+  code. Surfaced as notes in the check; handled at build time (Composer
+  post-install copy), like an object-cache drop-in.
+- **Residual gap 2 — `is_writable()` nags**: some plugins complain about the
+  read-only tree even when their real write target is mounted. Per-plugin
+  suppression lands in that plugin's integration class as adoption reports
+  arrive (KEDS's thim-core notice hider is the consumer-side prototype).
 
 ### Deploy migrations (`wp upsun migrate`)
 

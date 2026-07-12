@@ -7,6 +7,9 @@ final class IntegrationRegistry {
 	private const INTEGRATIONS = array(
 		'woocommerce'        => Integrations\WooCommerce::class,
 		'woocommerce-stripe' => Integrations\WooCommerceStripe::class,
+		'wordfence'          => Integrations\Wordfence::class,
+		'updraftplus'        => Integrations\UpdraftPlus::class,
+		'wp-rocket'          => Integrations\WpRocket::class,
 	);
 
 	/**

@@ -230,6 +230,10 @@ require_once dirname( __DIR__ ) . '/src/Modules/Smtp.php';
 require_once dirname( __DIR__ ) . '/src/Modules/Dashboard.php';
 require_once dirname( __DIR__ ) . '/src/Modules/CronHeartbeat.php';
 require_once dirname( __DIR__ ) . '/src/Modules/SafePreviews.php';
+require_once dirname( __DIR__ ) . '/src/Modules/WritablePaths.php';
+require_once dirname( __DIR__ ) . '/src/Integrations/Wordfence.php';
+require_once dirname( __DIR__ ) . '/src/Integrations/UpdraftPlus.php';
+require_once dirname( __DIR__ ) . '/src/Integrations/WpRocket.php';
 
 /**
  * Unset every PLATFORM_* variable a test may have set, and clear caches.
@@ -244,6 +248,8 @@ function upsun_test_clear_env(): void {
 		'PLATFORM_ROUTES',
 		'PLATFORM_RELATIONSHIPS',
 		'PLATFORM_SMTP_HOST',
+		'PLATFORM_APPLICATION',
+		'PLATFORM_APP_DIR',
 	) as $name ) {
 		putenv( $name );
 	}

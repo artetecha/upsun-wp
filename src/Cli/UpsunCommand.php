@@ -6,6 +6,7 @@ use Upsun\CacheCheck;
 use Upsun\Environment;
 use Upsun\Modules\SafePreviews;
 use Upsun\Modules\SiteHealth;
+use Upsun\Modules\WritablePaths;
 use WP_CLI;
 
 /**
@@ -349,6 +350,66 @@ class UpsunCommand {
 				$result['environment']
 			)
 		);
+	}
+
+	/**
+	 * Shows declared writable mounts and suggests missing ones.
+	 *
+	 * Lists the mounts declared in the Upsun configuration (read from
+	 * PLATFORM_APPLICATION), then checks the writable-path requirements of
+	 * known active plugins (the upsun_writable_path_requirements registry)
+	 * and prints ready-to-paste mount YAML for anything not covered.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--format=<format>]
+	 * : Render the mounts table in a particular format.
+	 * ---
+	 * default: table
+	 * options:
+	 *   - table
+	 *   - json
+	 *   - yaml
+	 *   - csv
+	 * ---
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp upsun mounts
+	 */
+	public function mounts( $args, $assoc_args ) {
+		if ( ! Environment::is_upsun() ) {
+			WP_CLI::log( 'Not running on Upsun.' );
+			return;
+		}
+
+		$rows = array();
+
+		foreach ( Environment::mounts() as $path => $mount ) {
+			$rows[] = array(
+				'mount'       => (string) $path,
+				'source'      => (string) ( is_array( $mount ) ? ( $mount['source'] ?? '' ) : '' ),
+				'source_path' => (string) ( is_array( $mount ) ? ( $mount['source_path'] ?? '' ) : '' ),
+			);
+		}
+
+		\WP_CLI\Utils\format_items( $assoc_args['format'] ?? 'table', $rows, array( 'mount', 'source', 'source_path' ) );
+
+		$suggestions = WritablePaths::suggestions();
+
+		if ( array() === $suggestions ) {
+			WP_CLI::success( 'All writable paths required by known active plugins are covered by mounts.' );
+			return;
+		}
+
+		foreach ( $suggestions as $suggestion ) {
+			WP_CLI::warning( sprintf( '%s writes to %s, which is not a mount.', $suggestion['label'], $suggestion['path'] ) );
+		}
+
+		WP_CLI::log( '' );
+		WP_CLI::log( 'Add to your application config (mount paths are relative to the app root):' );
+		WP_CLI::log( '' );
+		WP_CLI::log( WritablePaths::suggestions_yaml( $suggestions ) );
 	}
 
 	/**

@@ -79,6 +79,33 @@ final class Environment {
 	}
 
 	/**
+	 * Decoded PLATFORM_APPLICATION: the app configuration as deployed.
+	 *
+	 * @return array
+	 */
+	public static function application(): array {
+		return self::decoded( 'PLATFORM_APPLICATION' );
+	}
+
+	/**
+	 * Absolute path of the application directory (PLATFORM_APP_DIR).
+	 */
+	public static function app_dir(): ?string {
+		return self::env( 'PLATFORM_APP_DIR' );
+	}
+
+	/**
+	 * Declared writable mounts: app-relative path => definition.
+	 *
+	 * @return array<string, array>
+	 */
+	public static function mounts(): array {
+		$mounts = self::application()['mounts'] ?? array();
+
+		return is_array( $mounts ) ? $mounts : array();
+	}
+
+	/**
 	 * Decoded PLATFORM_RELATIONSHIPS: name => list of instances.
 	 *
 	 * @return array<string, array>
