@@ -13,8 +13,12 @@
 | v0.3 | Writable-path advisor (`writable-paths` + `wp upsun mounts`) | ✅ shipped in 0.3.1 (PR #50), verified on a preview env |
 | v0.3 | Opt-in sanitizers (email/password anonymizers, deactivate-plugins, scrub-options) | ✅ shipped in 0.3.2 (PR #51), verified on a preview env |
 | v0.3 | Deploy migrations (`wp upsun migrate`) | ✅ shipped in 0.3.3 (PR #52), verified by two live preview deploys, KEDS runs on it |
-| v0.3 | Relationship health, mount usage | ⬜ not started |
+| v0.3 | Relationship health (`wp upsun relationships --health`) | 🔄 implemented in 0.3.4; preview-env verification pending |
+| v0.3 | Mount usage visibility (`mount-usage` module) | 🔄 implemented in 0.3.4; preview-env verification pending |
 | v0.4 | Premium plugin vendoring toolkit (`wp upsun vendor`) | ⬜ planned |
+
+**0.3.4 closes the v0.3 feature list** — per the extraction section below,
+v0.3 shipping is an extraction trigger.
 | — | Extraction to an independent repo | ⬜ triggered by second consumer or v0.3 |
 
 The v0.2 milestone spans 0.2.x releases; version = package `composer.json` /
@@ -282,20 +286,28 @@ files. Every serious WP-on-Upsun project reinvents this. KEDS's own shell
 framework (`keds/deploy-migrations/`) keeps working as-is; swapping it to
 the plugin's PHP format is an optional consumer follow-up.
 
-### Relationship health & search wiring
+### Relationship health & search wiring — implemented in 0.3.4
 
-- `wp upsun relationships --health`: live checks per relationship (Redis
-  `INFO` memory/hit-rate, DB ping, search-service cluster status), surfaced in
-  Site Health too.
-- Auto-wiring helper for an Elasticsearch/OpenSearch relationship into
-  ElasticPress (host filter + Site Health check), behind a module toggle.
+- `wp upsun relationships --health`: live per-scheme probes (MySQL/MariaDB
+  ping + server info, reusing the wpdb handle for the relationship WordPress
+  runs on; Redis `INFO` memory/hit-rate/evictions; HTTP status with
+  Elasticsearch/OpenSearch cluster-status sniffing), joined to the shared
+  check registry (Site Health, dashboard, doctor). Unknown schemes are
+  skipped, never guessed, and never affect the verdict.
+- **Deferred to demand**: the ElasticPress auto-wiring helper. No consumer
+  runs a search service yet, so there is nothing to verify it against —
+  same policy as compat fixes and nag suppression, it lands as an
+  Integration when the first real adopter needs it.
 
-### Mount usage visibility
+### Mount usage visibility — implemented in 0.3.4
 
-Dashboard widget + doctor check reporting disk usage of the writable mounts
-against the app's disk size (from `PLATFORM_APPLICATION`). Full mounts are a
-rude way to discover a quota. Note: mounts share one disk — report per-mount
-`du` cautiously (expensive; cache the result, compute on cron).
+Two costs, two cadences: the shared disk's total/free comes from statvfs on
+a mount path (effectively free), so the `disk_usage` check reads it live
+(warn 80% used, fail 95%, thresholds filterable); the per-mount breakdown
+needs a directory walk, so a daily WP-Cron event caches it in an option and
+the "Disk & mounts" dashboard panel and check show it with its age. Mounts
+share one disk on Upsun, so the breakdown explains the headline number
+rather than adding to it.
 
 ---
 

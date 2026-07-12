@@ -48,6 +48,14 @@ class SiteHealth implements Module {
 				'label'    => __( 'Deploy migrations', 'upsun-mu-plugin' ),
 				'callback' => array( \Upsun\Migrations::class, 'check' ),
 			),
+			'relationships'     => array(
+				'label'    => __( 'Relationship health', 'upsun-mu-plugin' ),
+				'callback' => array( \Upsun\RelationshipHealth::class, 'check' ),
+			),
+			'disk_usage'        => array(
+				'label'    => __( 'Disk usage', 'upsun-mu-plugin' ),
+				'callback' => array( MountUsage::class, 'check' ),
+			),
 		);
 
 		/**

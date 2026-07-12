@@ -121,6 +121,11 @@ class UpsunCommand {
 	 *
 	 * ## OPTIONS
 	 *
+	 * [--health]
+	 * : Probe each relationship live — MySQL/MariaDB ping and server info,
+	 * Redis INFO memory/hit-rate/evictions, HTTP status with cluster-status
+	 * sniffing for search services. Unknown schemes are skipped.
+	 *
 	 * [--format=<format>]
 	 * : Render output in a particular format.
 	 * ---
@@ -135,10 +140,28 @@ class UpsunCommand {
 	 * ## EXAMPLES
 	 *
 	 *     wp upsun relationships
+	 *     wp upsun relationships --health
 	 */
 	public function relationships( $args, $assoc_args ) {
 		if ( ! Environment::is_upsun() ) {
 			WP_CLI::log( 'Not running on Upsun.' );
+			return;
+		}
+
+		if ( ! empty( $assoc_args['health'] ) ) {
+			$rows   = \Upsun\RelationshipHealth::probe_all();
+			$failed = array_filter( $rows, static fn ( array $row ) => 'fail' === $row['status'] );
+
+			\WP_CLI\Utils\format_items(
+				$assoc_args['format'] ?? 'table',
+				$rows,
+				array( 'relationship', 'scheme', 'host', 'status', 'detail' )
+			);
+
+			if ( array() !== $failed ) {
+				WP_CLI::error( sprintf( '%d relationship(s) failed their health probe.', count( $failed ) ) );
+			}
+
 			return;
 		}
 

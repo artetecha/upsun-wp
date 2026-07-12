@@ -68,11 +68,12 @@ Skipping this step does **not** weaken the runtime preview protections (mail int
 | `environment-indicator` | Color-coded admin-bar badge (branch · environment type) with an Upsun Console link, a dashboard widget with environment metadata, and a matching banner on the login screen. |
 | `page-cache` | Emits `Cache-Control: public, max-age=0, s-maxage={ttl}` on anonymous, session-free page views so the Upsun router can cache them; optionally strips configured Set-Cookie headers (e.g. LMS guest sessions) to keep responses cacheable. Built-in bypass patterns cover core session cookies; commerce patterns come from the Integrations layer. `wp upsun cache-check <url>` (also a form in the dashboard Caching panel) explains any page's verdict: effective TTL, Set-Cookie spoilers, bypass-pattern matches, the route cookie allowlist (declared via `upsun_cache_check_route_cache` — Upsun does not expose it at runtime), and whether the fetch was a router HIT/MISS/BYPASS. |
 | `updates-policy` | Disables the in-app auto-update machinery (the filesystem is read-only; Composer is the update path), replaces the auto-update toggles with a note, and removes the core Site Health tests that would fail by design. |
-| `site-health` | Upsun-specific Site Health checks: object cache round-trip, cron configuration, writable mounts, preview search visibility; plus an "Upsun" section in the Info tab. |
+| `site-health` | Upsun-specific Site Health checks: object cache round-trip, cron configuration, writable mounts, preview search visibility, deploy migrations, live relationship health (MySQL ping, Redis INFO, HTTP/cluster status), disk usage; plus an "Upsun" section in the Info tab. |
 | `preview-protection` | Sends `X-Robots-Tag: noindex, nofollow` and robots meta on non-production environments, without touching the `blog_public` option (the database is a production clone). |
 | `smtp` | Points PHPMailer at the on-platform relay (`PLATFORM_SMTP_HOST`, port 25) unless a mailer plugin already configured SMTP. |
 | `dashboard` | A top-level "Upsun" page in wp-admin (`manage_options`) styled like the WP Dashboard: panels are real meta boxes in the core dashboard grid — collapsible, draggable between columns, layout persisted per user. Panels: environment, services (credentials never rendered), health checks, resolved caching config, module status; plus operational actions (flush object cache). Extensible via `upsun_dashboard_panels`; deliberately actions-not-settings — configuration stays in code. |
 | `cron-heartbeat` | Proves cron *executes*, not just that it is configured: schedules a recurring event that stamps a timestamp option, and reports staleness (plus overdue-event counts) through Site Health, the dashboard, and `wp upsun doctor`. |
+| `mount-usage` | Disk and mount visibility: live disk total/free from the mount filesystem (warn at 80% used, fail at 95% — full mounts are a rude way to discover a quota), plus a per-mount size breakdown computed daily via WP-Cron (walking uploads is expensive) and shown with its age in a "Disk & mounts" dashboard panel and the shared checks. |
 | `writable-paths` | Advises on the writable-path needs of known plugins: Integrations declare where plugins write, the check compares that against the mounts declared in `PLATFORM_APPLICATION`, and `wp upsun mounts` prints ready-to-paste mount YAML for anything missing. Advisory-only by design — on Upsun the fix is a mount, not a runtime path redirection. |
 | `safe-previews` | Neuters live outbound integrations on preview clones, runtime-only (never DB writes): intercepts `wp_mail` (or redirects it) built-in; the WooCommerce integrations contribute Stripe test-mode forcing and webhook pausing through the same registry. Fresh clones and data syncs are detected via an environment stamp and sanitized by `wp upsun sanitize --if-needed` in the post_deploy hook (installation step 3), which runs the opt-in DB-writing sanitizers (anonymize user emails/passwords, deactivate listed plugins, scrub listed options — all disabled by default, enabled via filters) and fires `upsun_preview_sanitize` so consumers can scrub their own integrations; registries extensible via `upsun_safe_previews_actions` and `upsun_preview_sanitizers`. Adds a "Preview safety" health check and dashboard panel that warn when the hook wiring is missing. |
 
@@ -107,7 +108,7 @@ integrations do.
 ### Constants (wp-config friendly)
 
 - `UPSUN_MU_DISABLE` — kill switch for the whole plugin.
-- `UPSUN_DISABLE_ENVIRONMENT_INDICATOR`, `UPSUN_DISABLE_PAGE_CACHE`, `UPSUN_DISABLE_UPDATES_POLICY`, `UPSUN_DISABLE_SITE_HEALTH`, `UPSUN_DISABLE_PREVIEW_PROTECTION`, `UPSUN_DISABLE_SMTP`, `UPSUN_DISABLE_DASHBOARD`, `UPSUN_DISABLE_CRON_HEARTBEAT`, `UPSUN_DISABLE_SAFE_PREVIEWS`, `UPSUN_DISABLE_WRITABLE_PATHS` — per-module switches.
+- `UPSUN_DISABLE_ENVIRONMENT_INDICATOR`, `UPSUN_DISABLE_PAGE_CACHE`, `UPSUN_DISABLE_UPDATES_POLICY`, `UPSUN_DISABLE_SITE_HEALTH`, `UPSUN_DISABLE_PREVIEW_PROTECTION`, `UPSUN_DISABLE_SMTP`, `UPSUN_DISABLE_DASHBOARD`, `UPSUN_DISABLE_CRON_HEARTBEAT`, `UPSUN_DISABLE_SAFE_PREVIEWS`, `UPSUN_DISABLE_WRITABLE_PATHS`, `UPSUN_DISABLE_MOUNT_USAGE` — per-module switches.
 - `UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE`, `UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE_STRIPE` — per-integration switches.
 - `UPSUN_MIGRATIONS_DIR` — directory of deploy migrations (see below); unset = feature idle.
 - `UPSUN_MU_FORCE` — boot modules and integrations off-platform (testing against faked `PLATFORM_*` variables).
@@ -152,6 +153,8 @@ Module boot is deferred to `muplugins_loaded` priority 0, so **any mu-plugin** c
 | `upsun_sanitize_deactivate_plugins` | `string[]` | `[]` | Plugin basenames deactivated on sanitize (empty = disabled). |
 | `upsun_sanitize_scrub_options` | `array<string, mixed>` | `[]` | Options scrubbed on sanitize: option name (optionally with a dotted sub-key path like `gateway_settings.live_secret_key`) => replacement; `null` deletes/unsets. |
 | `upsun_migrations_dir` | `?string` | `UPSUN_MIGRATIONS_DIR` constant | Directory of deploy migrations; null = feature idle. |
+| `upsun_mount_usage_enabled` | `bool` | `true` | Disable the daily mount measurement and the "Disk & mounts" panel. |
+| `upsun_disk_usage_thresholds` | `array{int, int}` | `[80, 95]` | Used-percent thresholds for the disk-usage check (warn, fail). |
 | `upsun_writable_path_requirements` | `array<string, {label, active, paths, note?}>` | contributed by Integrations | Declare where a plugin writes (paths relative to wp-content; `active` evaluated at check time). The check and `wp upsun mounts` do the rest. |
 
 ### Actions
@@ -191,6 +194,7 @@ warns everywhere when migrations are pending and fails on misnamed files.
 wp upsun info            # project / environment / branch / routes
 wp upsun doctor          # health checks; exits 1 on failure (deploy-hook friendly)
 wp upsun relationships   # service relationships (credentials never printed)
+wp upsun relationships --health   # live probes: MySQL ping, Redis INFO, HTTP/cluster status
 wp upsun cache flush     # object cache only — the router cache has no purge API
 wp upsun cache-check /some/page          # why is/isn't this page router-cacheable?
 wp upsun cache-check / --cookie="a=1"    # ...and what do these request cookies change?

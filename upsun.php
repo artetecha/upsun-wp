@@ -15,13 +15,14 @@ if ( defined( 'UPSUN_MU_PLUGIN_DIR' ) ) {
 }
 
 define( 'UPSUN_MU_PLUGIN_DIR', __DIR__ );
-define( 'UPSUN_MU_PLUGIN_VERSION', '0.3.3' );
+define( 'UPSUN_MU_PLUGIN_VERSION', '0.3.4' );
 
 require_once __DIR__ . '/src/Environment.php';
 require_once __DIR__ . '/src/helpers.php';
 require_once __DIR__ . '/src/CacheCheck.php';
 require_once __DIR__ . '/src/Sanitizers.php';
 require_once __DIR__ . '/src/Migrations.php';
+require_once __DIR__ . '/src/RelationshipHealth.php';
 require_once __DIR__ . '/src/Module.php';
 require_once __DIR__ . '/src/ModuleRegistry.php';
 require_once __DIR__ . '/src/Integration.php';
@@ -41,6 +42,7 @@ require_once __DIR__ . '/src/Modules/Dashboard.php';
 require_once __DIR__ . '/src/Modules/CronHeartbeat.php';
 require_once __DIR__ . '/src/Modules/SafePreviews.php';
 require_once __DIR__ . '/src/Modules/WritablePaths.php';
+require_once __DIR__ . '/src/Modules/MountUsage.php';
 
 // The CLI command exists even off-platform so `wp upsun info` can report
 // "Not running on Upsun" instead of erroring in local/CI environments.

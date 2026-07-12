@@ -15,6 +15,7 @@ final class ModuleRegistry {
 		'cron-heartbeat'        => Modules\CronHeartbeat::class,
 		'safe-previews'         => Modules\SafePreviews::class,
 		'writable-paths'        => Modules\WritablePaths::class,
+		'mount-usage'           => Modules\MountUsage::class,
 	);
 
 	/**
