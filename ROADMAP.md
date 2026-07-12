@@ -10,8 +10,9 @@
 | v0.2 | SafePreviews module + `wp upsun sanitize` | ✅ shipped in 0.2.2 (PR #46); dashboard restyle followed in 0.2.3 (PR #47) |
 | v0.2 | `wp upsun cache-check <url>` | ✅ shipped in 0.2.4 (PR #48), verified live — **v0.2 milestone complete** |
 | v0.3 | Integrations architecture (`src/Integrations/`) | ✅ shipped in 0.3.0 (PR #49), verified on a preview env |
-| v0.3 | Writable-path advisor (`writable-paths` + `wp upsun mounts`) | 🔄 implemented in 0.3.1; preview-env verification pending |
-| v0.3 | Opt-in sanitizers, `wp upsun migrate`, relationship health, mount usage | ⬜ not started |
+| v0.3 | Writable-path advisor (`writable-paths` + `wp upsun mounts`) | ✅ shipped in 0.3.1 (PR #50), verified on a preview env |
+| v0.3 | Opt-in sanitizers (email/password anonymizers, deactivate-plugins, scrub-options) | 🔄 implemented in 0.3.2; preview-env verification pending |
+| v0.3 | `wp upsun migrate`, relationship health, mount usage | ⬜ not started |
 | — | Extraction to an independent repo | ⬜ triggered by second consumer or v0.3 |
 
 The v0.2 milestone spans 0.2.x releases; version = package `composer.json` /
@@ -198,29 +199,45 @@ pinned by a test); every feature below that touches a specific plugin
 (compat fixes, `deactivate-plugins` targets, gateway sanitizers) lands as
 an integration, not as inline knowledge in a concern module.
 
-SafePreviews' `upsun_preview_sanitize` hook currently fires into consumer
-code only; the built-in protections are runtime filters that never write to
-the database. This adds a registry of *DB-writing* sanitizers that run as
-part of the sanitize flow — each shipped **disabled** and enabled per-slug
-via filter (code-based config, no toggle UI; 0.x semver forbids changing
-default behavior). Writes are safe by platform design: data only flows
-parent→child on Upsun, so scrubbed preview state can never leak back, and a
-resync re-triggers sanitize.
+### Built-in sanitizers (opt-in, disabled by default) — implemented in 0.3.2
 
-Launch candidates (each idempotent, dry-run aware, reporting what changed
-through `wp upsun sanitize`, the dashboard panel, and doctor):
+SafePreviews' runtime protections never write to the database; the
+`Sanitizers` registry adds *DB-writing* sanitizers that run inside the
+sanitize flow (before `upsun_preview_sanitize`, so consumer callbacks get
+the final say) — each shipped **disabled** and enabled per-slug via filter
+(code-based config, no toggle UI; 0.x semver forbids changing default
+behavior). Writes are safe by platform design: data only flows parent→child
+on Upsun, so scrubbed preview state can never leak back, and a resync
+re-triggers sanitize. Every sanitizer is idempotent and dry-run aware,
+reporting what changed through `wp upsun sanitize` and the dashboard panel.
 
-- **`anonymize-user-emails`** — rewrite user emails to a per-user `.invalid`
-  address. Defense-in-depth beyond mail interception: no plugin can reach a
-  real customer through any send path. The most-reinvented preview sanitizer
-  in every hosting workflow.
+Enablement is deliberately never DB-backed (a resync would erase the toggle
+at exactly the moment it is needed). Two equivalent surfaces: filters in a
+consumer mu-plugin, or `wp upsun sanitize --enable=<ids>` — per-run forcing
+that turns the post_deploy hook line into the project-level sanitization
+policy, versioned in `.upsun/config.yaml` and identical for every child
+environment.
+
+Shipped built-ins:
+
+- **`anonymize-user-emails`** — one idempotent UPDATE rewriting emails to
+  `user-{ID}@upsun-preview.invalid` (RFC 2606). Defense-in-depth beyond mail
+  interception: no plugin can reach a real customer through any send path.
+  Preserve list shared with the password anonymizer
+  (`upsun_sanitize_preserved_emails`).
+- **`anonymize-user-passwords`** — `true` = `password` for everyone, or a
+  `'password-{ID}'` template for per-user values; single UPDATE using legacy
+  MD5 hashes (WP rehashes on first login), exactly idempotent. Pair with
+  Upsun's HTTP access control — known passwords on a reachable preview are
+  a door.
 - **`deactivate-plugins`** — deactivate a consumer-supplied list of plugin
-  slugs on previews (backup runners, analytics, gateways with no runtime
-  test-mode switch). Would replace KEDS's LearnPress-Stripe gateway-removal
-  shim with declarative config.
+  basenames on previews (backup runners, analytics, gateways with no runtime
+  test-mode switch). Could replace KEDS's LearnPress-Stripe gateway-removal
+  shim with declarative config — deliberately not switched: the runtime
+  filter needs no DB write and re-applies instantly on resync.
 - **`scrub-options`** — null/overwrite a consumer-supplied list of option
-  names or array sub-keys. The generic escape hatch for plugins that read
-  credentials in ways runtime filters cannot reach (the LearnPress
+  names or dotted array sub-keys. The generic escape hatch for plugins that
+  read credentials in ways runtime filters cannot reach (the LearnPress
   settings-cache problem, generalized).
 
 ### Writable-path advisor (`writable-paths`) — implemented in 0.3.1

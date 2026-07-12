@@ -48,6 +48,17 @@ hooks:
     wp upsun sanitize --if-needed
 ```
 
+This line is also where your **sanitization policy** lives: `--enable` forces
+the opt-in DB-writing sanitizers for the run, so the whole policy is declared
+at project level in versioned config and applied identically to every child
+environment (or vary it per environment type with a small script):
+
+```yaml
+hooks:
+  post_deploy: |
+    wp upsun sanitize --if-needed --enable="anonymize-user-emails,anonymize-user-passwords:password-{ID}"
+```
+
 Skipping this step does **not** weaken the runtime preview protections (mail interception, payment test mode, webhook pausing are active on every preview request from boot) — it only means the one-time `upsun_preview_sanitize` consumer actions never fire. The "Preview safety" health check (Site Health, the Upsun dashboard, `wp upsun doctor`) warns on every environment until the wiring is in place. If you cannot edit your hooks, enable the per-boot fallback via the `upsun_safe_previews_boot_check` filter.
 
 ## Modules
@@ -63,7 +74,7 @@ Skipping this step does **not** weaken the runtime preview protections (mail int
 | `dashboard` | A top-level "Upsun" page in wp-admin (`manage_options`) styled like the WP Dashboard: panels are real meta boxes in the core dashboard grid — collapsible, draggable between columns, layout persisted per user. Panels: environment, services (credentials never rendered), health checks, resolved caching config, module status; plus operational actions (flush object cache). Extensible via `upsun_dashboard_panels`; deliberately actions-not-settings — configuration stays in code. |
 | `cron-heartbeat` | Proves cron *executes*, not just that it is configured: schedules a recurring event that stamps a timestamp option, and reports staleness (plus overdue-event counts) through Site Health, the dashboard, and `wp upsun doctor`. |
 | `writable-paths` | Advises on the writable-path needs of known plugins: Integrations declare where plugins write, the check compares that against the mounts declared in `PLATFORM_APPLICATION`, and `wp upsun mounts` prints ready-to-paste mount YAML for anything missing. Advisory-only by design — on Upsun the fix is a mount, not a runtime path redirection. |
-| `safe-previews` | Neuters live outbound integrations on preview clones, runtime-only (never DB writes): intercepts `wp_mail` (or redirects it) built-in; the WooCommerce integrations contribute Stripe test-mode forcing and webhook pausing through the same registry. Fresh clones and data syncs are detected via an environment stamp and sanitized by `wp upsun sanitize --if-needed` in the post_deploy hook (installation step 3), which fires `upsun_preview_sanitize` so consumers can scrub their own integrations; registry extensible via `upsun_safe_previews_actions`. Adds a "Preview safety" health check and dashboard panel that warn when the hook wiring is missing. |
+| `safe-previews` | Neuters live outbound integrations on preview clones, runtime-only (never DB writes): intercepts `wp_mail` (or redirects it) built-in; the WooCommerce integrations contribute Stripe test-mode forcing and webhook pausing through the same registry. Fresh clones and data syncs are detected via an environment stamp and sanitized by `wp upsun sanitize --if-needed` in the post_deploy hook (installation step 3), which runs the opt-in DB-writing sanitizers (anonymize user emails/passwords, deactivate listed plugins, scrub listed options — all disabled by default, enabled via filters) and fires `upsun_preview_sanitize` so consumers can scrub their own integrations; registries extensible via `upsun_safe_previews_actions` and `upsun_preview_sanitizers`. Adds a "Preview safety" health check and dashboard panel that warn when the hook wiring is missing. |
 
 ## Integrations
 
@@ -133,6 +144,12 @@ Module boot is deferred to `muplugins_loaded` priority 0, so **any mu-plugin** c
 | `upsun_safe_previews_boot_check` | `bool` | `false` | Fallback for projects that cannot edit their hooks: check the environment stamp on every boot and sanitize inline when it is stale. Prefer the post_deploy hook. |
 | `upsun_cache_check_route_cache` | `array{enabled, default_ttl, cookies, known}` | documented router defaults | Mirror your route's cache block from `.upsun/config.yaml` (set `known: true`) so `wp upsun cache-check` reports your real cookie allowlist — Upsun does not expose it at runtime. |
 | `upsun_writable_paths_enabled` | `bool` | `true` | Disable the writable-path advisor check. |
+| `upsun_preview_sanitizers` | `array<string, {label, enabled, run}>` | 4 built-ins, all disabled | Add your own DB-writing sanitizers (idempotent, dry-run aware) or remove built-ins. They run inside the sanitize flow, before `upsun_preview_sanitize`. |
+| `upsun_sanitize_anonymize_user_emails` | `bool` | `false` | Rewrite every user email to `user-{ID}@upsun-preview.invalid` on sanitize (one idempotent UPDATE; usernames keep working for login). |
+| `upsun_sanitize_anonymize_passwords` | `bool\|string` | `false` | `true` sets every password to `password`; a template like `'password-{ID}'` gives per-user passwords (legacy-MD5 hashes, rehashed by WP on first login). **Pair with Upsun's HTTP access control** — known passwords on a reachable preview are a door. |
+| `upsun_sanitize_preserved_emails` | `string[]` | `[]` | Users exempt from BOTH anonymizers: exact addresses or `'@domain'` suffixes. |
+| `upsun_sanitize_deactivate_plugins` | `string[]` | `[]` | Plugin basenames deactivated on sanitize (empty = disabled). |
+| `upsun_sanitize_scrub_options` | `array<string, mixed>` | `[]` | Options scrubbed on sanitize: option name (optionally with a dotted sub-key path like `gateway_settings.live_secret_key`) => replacement; `null` deletes/unsets. |
 | `upsun_writable_path_requirements` | `array<string, {label, active, paths, note?}>` | contributed by Integrations | Declare where a plugin writes (paths relative to wp-content; `active` evaluated at check time). The check and `wp upsun mounts` do the rest. |
 
 ### Actions
@@ -159,6 +176,9 @@ wp upsun mounts          # declared mounts + ready-to-paste YAML for missing one
 wp upsun sanitize        # fire the preview sanitize actions (refuses on production)
 wp upsun sanitize --if-needed   # post_deploy-hook mode: stamp-aware, safe everywhere
 wp upsun sanitize --dry-run
+wp upsun sanitize --enable="anonymize-user-emails,anonymize-user-passwords:password-{ID}"
+                         # force sanitizers for this run only (project-level policy
+                         # when placed in the post_deploy hook); filters still work
 ```
 
 All commands print "Not running on Upsun." and exit 0 off-platform.

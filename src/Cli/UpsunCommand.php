@@ -246,9 +246,10 @@ class UpsunCommand {
 	/**
 	 * Runs the preview sanitize actions (fires upsun_preview_sanitize).
 	 *
-	 * Reports the state of the runtime preview protections, then fires the
-	 * consumer sanitize hook and refreshes the environment stamp. Refuses to
-	 * run on production unless --if-needed is set.
+	 * Reports the state of the runtime preview protections and the opt-in
+	 * sanitizers, then runs the enabled sanitizers, fires the consumer
+	 * sanitize hook, and refreshes the environment stamp. Refuses to run on
+	 * production unless --if-needed is set.
 	 *
 	 * The intended wiring is `wp upsun sanitize --if-needed` in the
 	 * post_deploy hook: post_deploy is the only hook that runs on every
@@ -263,6 +264,14 @@ class UpsunCommand {
 	 * : Deploy-hook mode. On production, refresh the environment stamp and
 	 * exit; on previews, run only when the stamp shows freshly cloned or
 	 * synced data.
+	 *
+	 * [--enable=<sanitizers>]
+	 * : Force sanitizers on for this run (project-level policy — put this
+	 * in the post_deploy hook). Comma-separated ids, each optionally with a
+	 * :value for the built-ins that take one: a password template for
+	 * anonymize-user-passwords, pipe-separated plugin basenames for
+	 * deactivate-plugins. Nothing is persisted; filters remain the
+	 * code-based alternative.
 	 *
 	 * [--dry-run]
 	 * : Report the protections and hooked callbacks without firing anything.
@@ -282,7 +291,8 @@ class UpsunCommand {
 	 *
 	 *     wp upsun sanitize
 	 *     wp upsun sanitize --if-needed   # post_deploy hook, all environments
-	 *     wp upsun sanitize --dry-run
+	 *     wp upsun sanitize --if-needed --enable="anonymize-user-emails,anonymize-user-passwords:password-{ID}"
+	 *     wp upsun sanitize --dry-run --enable="deactivate-plugins:updraftplus/updraftplus.php|wordfence/wordfence.php"
 	 */
 	public function sanitize( $args, $assoc_args ) {
 		if ( ! Environment::is_upsun() ) {
@@ -308,6 +318,27 @@ class UpsunCommand {
 			return;
 		}
 
+		if ( ! empty( $assoc_args['enable'] ) ) {
+			$forced = array();
+
+			foreach ( explode( ',', (string) $assoc_args['enable'] ) as $item ) {
+				$item = trim( $item );
+
+				if ( '' === $item ) {
+					continue;
+				}
+
+				$parts                       = explode( ':', $item, 2 );
+				$forced[ trim( $parts[0] ) ] = isset( $parts[1] ) && '' !== trim( $parts[1] ) ? trim( $parts[1] ) : true;
+			}
+
+			foreach ( array_keys( array_diff_key( $forced, \Upsun\Sanitizers::registry() ) ) as $unknown ) {
+				WP_CLI::warning( "Unknown sanitizer '{$unknown}' in --enable." );
+			}
+
+			\Upsun\Sanitizers::force( $forced );
+		}
+
 		$state = \Upsun\ModuleRegistry::status()['safe-previews']['state'] ?? 'not booted';
 
 		if ( 'loaded' !== $state ) {
@@ -331,11 +362,28 @@ class UpsunCommand {
 
 		\WP_CLI\Utils\format_items( $assoc_args['format'] ?? 'table', $rows, array( 'protection', 'state', 'detail' ) );
 
+		$sanitizer_rows = array();
+
+		foreach ( \Upsun\Sanitizers::registry() as $id => $sanitizer ) {
+			$sanitizer_rows[] = array(
+				'sanitizer' => (string) $id,
+				'enabled'   => \Upsun\Sanitizers::is_enabled( (string) $id, $sanitizer ) ? 'yes' : 'no',
+			);
+		}
+
+		if ( array() !== $sanitizer_rows ) {
+			\WP_CLI\Utils\format_items( $assoc_args['format'] ?? 'table', $sanitizer_rows, array( 'sanitizer', 'enabled' ) );
+		}
+
 		$listeners = has_action( SafePreviews::SANITIZE_HOOK )
 			? 'consumer callbacks are hooked'
 			: 'no consumer callbacks hooked';
 
 		if ( ! empty( $assoc_args['dry-run'] ) ) {
+			foreach ( \Upsun\Sanitizers::run( true ) as $line ) {
+				WP_CLI::log( '- ' . $line );
+			}
+
 			WP_CLI::log( "Dry run: would fire upsun_preview_sanitize ({$listeners}) and refresh the environment stamp." );
 			return;
 		}
@@ -343,9 +391,14 @@ class UpsunCommand {
 		$stored = get_option( SafePreviews::STAMP_OPTION );
 		$result = $module->run_sanitize( is_string( $stored ) ? $stored : null );
 
+		foreach ( $result['reports'] as $line ) {
+			WP_CLI::log( '- ' . $line );
+		}
+
 		WP_CLI::success(
 			sprintf(
-				'Fired upsun_preview_sanitize (%s); environment stamp set to "%s".',
+				'Ran %d sanitizer(s), fired upsun_preview_sanitize (%s); environment stamp set to "%s".',
+				count( $result['reports'] ),
 				$listeners,
 				$result['environment']
 			)

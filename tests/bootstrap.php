@@ -161,12 +161,41 @@ function wp_json_encode( $value, $flags = 0, $depth = 512 ) {
 $GLOBALS['upsun_test_options'] = array();
 
 function get_option( $name, $default_value = false ) {
-	return $GLOBALS['upsun_test_options'][ $name ] ?? 1;
+	if ( array_key_exists( $name, $GLOBALS['upsun_test_options'] ) ) {
+		return $GLOBALS['upsun_test_options'][ $name ];
+	}
+
+	// Callers passing an explicit default get real WP semantics; legacy
+	// single-arg callers keep the historic truthy-1 fallback.
+	return func_num_args() >= 2 ? $default_value : 1;
 }
 
 function update_option( $name, $value, $autoload = null ) {
 	$GLOBALS['upsun_test_options'][ $name ] = $value;
 
+	return true;
+}
+
+function delete_option( $name ) {
+	unset( $GLOBALS['upsun_test_options'][ $name ] );
+
+	return true;
+}
+
+// Active-plugin store for the deactivate-plugins sanitizer.
+$GLOBALS['upsun_test_active_plugins'] = array();
+
+function is_plugin_active( $plugin ) {
+	return in_array( $plugin, $GLOBALS['upsun_test_active_plugins'], true );
+}
+
+function deactivate_plugins( $plugins, $silent = false, $network_wide = null ) {
+	$GLOBALS['upsun_test_active_plugins'] = array_values(
+		array_diff( $GLOBALS['upsun_test_active_plugins'], (array) $plugins )
+	);
+}
+
+function wp_cache_flush() {
 	return true;
 }
 
@@ -215,6 +244,7 @@ function wp_is_writable( $path ) {
 require_once dirname( __DIR__ ) . '/src/Environment.php';
 require_once dirname( __DIR__ ) . '/src/helpers.php';
 require_once dirname( __DIR__ ) . '/src/CacheCheck.php';
+require_once dirname( __DIR__ ) . '/src/Sanitizers.php';
 require_once dirname( __DIR__ ) . '/src/Module.php';
 require_once dirname( __DIR__ ) . '/src/ModuleRegistry.php';
 require_once dirname( __DIR__ ) . '/src/Integration.php';

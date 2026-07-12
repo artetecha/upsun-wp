@@ -30,6 +30,9 @@ class SafePreviews implements Module {
 	/** Timestamp of the last sanitize run on this database. */
 	public const SANITIZED_OPTION = 'upsun_preview_sanitize_last';
 
+	/** Report of the last sanitize run: [ time, reports[] ] (non-autoloaded). */
+	public const REPORT_OPTION = 'upsun_preview_sanitize_report';
+
 	/** Ring buffer of recently intercepted mail (to/subject/time only). */
 	public const MAIL_LOG_OPTION = 'upsun_intercepted_mail';
 
@@ -336,17 +339,21 @@ class SafePreviews implements Module {
 	}
 
 	/**
-	 * Restamp and fire the consumer sanitize hook. The stamp is written
-	 * before the hook fires so concurrent first requests do not re-trigger,
-	 * but hooked callbacks must still be idempotent.
+	 * Restamp, run the enabled sanitizers, and fire the consumer sanitize
+	 * hook. The stamp is written before anything runs so concurrent first
+	 * requests do not re-trigger; sanitizers and hooked callbacks must
+	 * still be idempotent. Built-in sanitizers run before the hook so
+	 * consumer callbacks get the final say.
 	 *
 	 * @param string|null $previous The environment the database came from.
-	 * @return array{previous: ?string, environment: string, listeners: bool}
+	 * @return array{previous: ?string, environment: string, listeners: bool, reports: string[]}
 	 */
 	public function run_sanitize( ?string $previous = null ): array {
 		$current = (string) Environment::name();
 
 		update_option( self::STAMP_OPTION, $current );
+
+		$reports = \Upsun\Sanitizers::run( false );
 
 		/**
 		 * Fires when a preview database needs sanitizing: on the first boot
@@ -360,11 +367,20 @@ class SafePreviews implements Module {
 		do_action( self::SANITIZE_HOOK, $previous, $current );
 
 		update_option( self::SANITIZED_OPTION, time(), false );
+		update_option(
+			self::REPORT_OPTION,
+			array(
+				'time'    => time(),
+				'reports' => $reports,
+			),
+			false
+		);
 
 		return array(
 			'previous'    => $previous,
 			'environment' => $current,
 			'listeners'   => (bool) has_action( self::SANITIZE_HOOK ),
+			'reports'     => $reports,
 		);
 	}
 
@@ -504,10 +520,47 @@ class SafePreviews implements Module {
 			);
 		}
 
+		$this->render_sanitizers();
 		$this->render_intercepted_mail();
 		$this->render_sanitize_form();
 
 		echo '<p>' . esc_html__( 'Protections are runtime-only: the cloned database is never modified (except the stamp options above).', 'upsun-mu-plugin' ) . '</p>';
+	}
+
+	private function render_sanitizers(): void {
+		$registry = \Upsun\Sanitizers::registry();
+
+		if ( array() !== $registry ) {
+			$parts = array();
+
+			foreach ( $registry as $id => $sanitizer ) {
+				$parts[] = sprintf(
+					'%s (%s)',
+					(string) $id,
+					\Upsun\Sanitizers::is_enabled( (string) $id, $sanitizer )
+						? __( 'enabled', 'upsun-mu-plugin' )
+						: __( 'disabled', 'upsun-mu-plugin' )
+				);
+			}
+
+			printf(
+				'<p>%s %s</p>',
+				esc_html__( 'Sanitizers (opt-in via filters):', 'upsun-mu-plugin' ),
+				esc_html( implode( ', ', $parts ) )
+			);
+		}
+
+		$report = get_option( self::REPORT_OPTION );
+
+		if ( is_array( $report ) && ! empty( $report['reports'] ) && is_array( $report['reports'] ) ) {
+			echo '<ul style="list-style: disc; margin-left: 1.2em;">';
+
+			foreach ( $report['reports'] as $line ) {
+				printf( '<li>%s</li>', esc_html( (string) $line ) );
+			}
+
+			echo '</ul>';
+		}
 	}
 
 	private function render_intercepted_mail(): void {
