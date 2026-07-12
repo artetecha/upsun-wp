@@ -109,6 +109,7 @@ integrations do.
 - `UPSUN_MU_DISABLE` — kill switch for the whole plugin.
 - `UPSUN_DISABLE_ENVIRONMENT_INDICATOR`, `UPSUN_DISABLE_PAGE_CACHE`, `UPSUN_DISABLE_UPDATES_POLICY`, `UPSUN_DISABLE_SITE_HEALTH`, `UPSUN_DISABLE_PREVIEW_PROTECTION`, `UPSUN_DISABLE_SMTP`, `UPSUN_DISABLE_DASHBOARD`, `UPSUN_DISABLE_CRON_HEARTBEAT`, `UPSUN_DISABLE_SAFE_PREVIEWS`, `UPSUN_DISABLE_WRITABLE_PATHS` — per-module switches.
 - `UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE`, `UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE_STRIPE` — per-integration switches.
+- `UPSUN_MIGRATIONS_DIR` — directory of deploy migrations (see below); unset = feature idle.
 - `UPSUN_MU_FORCE` — boot modules and integrations off-platform (testing against faked `PLATFORM_*` variables).
 
 ### Filters
@@ -150,6 +151,7 @@ Module boot is deferred to `muplugins_loaded` priority 0, so **any mu-plugin** c
 | `upsun_sanitize_preserved_emails` | `string[]` | `[]` | Users exempt from BOTH anonymizers: exact addresses or `'@domain'` suffixes. |
 | `upsun_sanitize_deactivate_plugins` | `string[]` | `[]` | Plugin basenames deactivated on sanitize (empty = disabled). |
 | `upsun_sanitize_scrub_options` | `array<string, mixed>` | `[]` | Options scrubbed on sanitize: option name (optionally with a dotted sub-key path like `gateway_settings.live_secret_key`) => replacement; `null` deletes/unsets. |
+| `upsun_migrations_dir` | `?string` | `UPSUN_MIGRATIONS_DIR` constant | Directory of deploy migrations; null = feature idle. |
 | `upsun_writable_path_requirements` | `array<string, {label, active, paths, note?}>` | contributed by Integrations | Declare where a plugin writes (paths relative to wp-content; `active` evaluated at check time). The check and `wp upsun mounts` do the rest. |
 
 ### Actions
@@ -157,6 +159,27 @@ Module boot is deferred to `muplugins_loaded` priority 0, so **any mu-plugin** c
 | Action | When it fires |
 |---|---|
 | `upsun_preview_sanitize` (`?string $previous, string $current`) | When `wp upsun sanitize` runs (typically `--if-needed` from the post_deploy hook after a clone or data sync, detected via the `upsun_environment_stamp` option), from the dashboard "Run sanitize actions now" button, or at boot if `upsun_safe_previews_boot_check` is enabled. Scrub or reconfigure site-specific integrations here; callbacks must be idempotent. |
+
+### Deploy migrations
+
+Ordered, once-per-database changes that ship with your code. Point
+`UPSUN_MIGRATIONS_DIR` at a directory of PHP files named
+`YYYYMMDD_NNNN_short_name.php`, each returning a callable:
+
+```php
+<?php // migrations/20260712_0001_enable_ip_sessions.php
+return static function () {
+	update_option( 'learn_press_store_ip_customer_session', 'yes' );
+};
+```
+
+Run `wp upsun migrate` from the **deploy hook** (before traffic): pending
+migrations apply in filename order, each success is recorded in a
+non-autoloaded option, and the first failure (throwable or `return false`)
+exits non-zero so the deploy aborts. Completion markers live in the
+database on purpose — a preview cloned from production carries them along
+with the already-migrated data, so nothing re-runs. A shared health check
+warns everywhere when migrations are pending and fails on misnamed files.
 
 ### Helper functions
 
@@ -173,6 +196,8 @@ wp upsun cache-check /some/page          # why is/isn't this page router-cacheab
 wp upsun cache-check / --cookie="a=1"    # ...and what do these request cookies change?
 wp upsun cache-check / --auth=user:pass  # for previews behind HTTP access control
 wp upsun mounts          # declared mounts + ready-to-paste YAML for missing ones
+wp upsun migrate         # apply pending deploy migrations; non-zero exit aborts the deploy
+wp upsun migrate --dry-run
 wp upsun sanitize        # fire the preview sanitize actions (refuses on production)
 wp upsun sanitize --if-needed   # post_deploy-hook mode: stamp-aware, safe everywhere
 wp upsun sanitize --dry-run

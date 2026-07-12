@@ -245,6 +245,7 @@ require_once dirname( __DIR__ ) . '/src/Environment.php';
 require_once dirname( __DIR__ ) . '/src/helpers.php';
 require_once dirname( __DIR__ ) . '/src/CacheCheck.php';
 require_once dirname( __DIR__ ) . '/src/Sanitizers.php';
+require_once dirname( __DIR__ ) . '/src/Migrations.php';
 require_once dirname( __DIR__ ) . '/src/Module.php';
 require_once dirname( __DIR__ ) . '/src/ModuleRegistry.php';
 require_once dirname( __DIR__ ) . '/src/Integration.php';

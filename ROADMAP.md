@@ -11,8 +11,9 @@
 | v0.2 | `wp upsun cache-check <url>` | ✅ shipped in 0.2.4 (PR #48), verified live — **v0.2 milestone complete** |
 | v0.3 | Integrations architecture (`src/Integrations/`) | ✅ shipped in 0.3.0 (PR #49), verified on a preview env |
 | v0.3 | Writable-path advisor (`writable-paths` + `wp upsun mounts`) | ✅ shipped in 0.3.1 (PR #50), verified on a preview env |
-| v0.3 | Opt-in sanitizers (email/password anonymizers, deactivate-plugins, scrub-options) | 🔄 implemented in 0.3.2; preview-env verification pending |
-| v0.3 | `wp upsun migrate`, relationship health, mount usage | ⬜ not started |
+| v0.3 | Opt-in sanitizers (email/password anonymizers, deactivate-plugins, scrub-options) | ✅ shipped in 0.3.2 (PR #51), verified on a preview env |
+| v0.3 | Deploy migrations (`wp upsun migrate`) | 🔄 implemented in 0.3.3; preview-env verification pending |
+| v0.3 | Relationship health, mount usage | ⬜ not started |
 | — | Extraction to an independent repo | ⬜ triggered by second consumer or v0.3 |
 
 The v0.2 milestone spans 0.2.x releases; version = package `composer.json` /
@@ -267,13 +268,18 @@ remains is a discovery problem plus two residual gaps:
   suppression lands in that plugin's integration class as adoption reports
   arrive (KEDS's thim-core notice hider is the consumer-side prototype).
 
-### Deploy migrations (`wp upsun migrate`)
+### Deploy migrations (`wp upsun migrate`) — implemented in 0.3.3
 
-Generalize the shell-script framework proven in the KEDS repo: ordered,
-once-per-database PHP migration files from a consumer directory
-(`UPSUN_MIGRATIONS_DIR` / filter), tracked in options, `--dry-run` support,
-non-zero exit on failure so deploy hooks abort. Every serious WP-on-Upsun
-project reinvents this.
+Generalizes the shell-script framework proven in the KEDS repo: ordered,
+once-per-database PHP migration files (`YYYYMMDD_NNNN_short_name.php`, each
+returning a callable) from a consumer directory (`UPSUN_MIGRATIONS_DIR` /
+`upsun_migrations_dir`), tracked per-migration in non-autoloaded options
+(clones carry the markers with the migrated data), `--dry-run` support,
+non-zero exit on the first failure so deploy hooks abort before traffic,
+plus a shared health check that warns on pending and fails on misnamed
+files. Every serious WP-on-Upsun project reinvents this. KEDS's own shell
+framework (`keds/deploy-migrations/`) keeps working as-is; swapping it to
+the plugin's PHP format is an optional consumer follow-up.
 
 ### Relationship health & search wiring
 

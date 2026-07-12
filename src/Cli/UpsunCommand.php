@@ -4,6 +4,7 @@ namespace Upsun\Cli;
 
 use Upsun\CacheCheck;
 use Upsun\Environment;
+use Upsun\Migrations;
 use Upsun\Modules\SafePreviews;
 use Upsun\Modules\SiteHealth;
 use Upsun\Modules\WritablePaths;
@@ -267,11 +268,13 @@ class UpsunCommand {
 	 *
 	 * [--enable=<sanitizers>]
 	 * : Force sanitizers on for this run (project-level policy — put this
-	 * in the post_deploy hook). Comma-separated ids, each optionally with a
-	 * :value for the built-ins that take one: a password template for
-	 * anonymize-user-passwords, pipe-separated plugin basenames for
-	 * deactivate-plugins. Nothing is persisted; filters remain the
-	 * code-based alternative.
+	 * in the post_deploy hook). Comma-separated ids, each optionally taking
+	 * a value after a colon for the built-ins that support one (a password
+	 * template for anonymize-user-passwords, pipe-separated plugin basenames
+	 * for deactivate-plugins). Nothing is persisted; filters remain the
+	 * code-based alternative. Note: WP-CLI treats docblock lines starting
+	 * with a colon as description markers, so never begin a line here with
+	 * one.
 	 *
 	 * [--dry-run]
 	 * : Report the protections and hooked callbacks without firing anything.
@@ -403,6 +406,95 @@ class UpsunCommand {
 				$result['environment']
 			)
 		);
+	}
+
+	/**
+	 * Applies pending deploy migrations in order.
+	 *
+	 * Migrations are PHP files named YYYYMMDD_NNNN_short_name.php in the
+	 * directory set by UPSUN_MIGRATIONS_DIR (or the upsun_migrations_dir
+	 * filter); each returns a callable performing one once-per-database
+	 * change. Successful migrations are recorded in non-autoloaded options
+	 * and never re-run — clones carry the markers with the migrated data.
+	 * Exits non-zero on the first failure so a deploy hook aborts before
+	 * traffic. Run it from the deploy hook, before caches warm.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--dry-run]
+	 * : List the migration status without applying anything.
+	 *
+	 * [--format=<format>]
+	 * : Render the status table in a particular format.
+	 * ---
+	 * default: table
+	 * options:
+	 *   - table
+	 *   - json
+	 *   - yaml
+	 *   - csv
+	 * ---
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp upsun migrate --dry-run
+	 *     wp upsun migrate
+	 */
+	public function migrate( $args, $assoc_args ) {
+		if ( ! Environment::is_upsun() ) {
+			WP_CLI::log( 'Not running on Upsun.' );
+			return;
+		}
+
+		if ( null === Migrations::directory() ) {
+			WP_CLI::log( 'No migrations directory configured (UPSUN_MIGRATIONS_DIR / upsun_migrations_dir); nothing to do.' );
+			return;
+		}
+
+		$rows = array_map(
+			static fn ( array $row ) => array(
+				'migration'  => $row['id'],
+				'state'      => $row['state'],
+				'applied_at' => $row['applied_at'],
+			),
+			Migrations::status()
+		);
+
+		\WP_CLI\Utils\format_items( $assoc_args['format'] ?? 'table', $rows, array( 'migration', 'state', 'applied_at' ) );
+
+		$invalid = Migrations::invalid();
+
+		if ( array() !== $invalid ) {
+			WP_CLI::error( 'Invalid migration filename(s): ' . implode( ', ', $invalid ) . '. Expected YYYYMMDD_NNNN_short_name.php.' );
+		}
+
+		$pending = Migrations::pending();
+
+		if ( ! empty( $assoc_args['dry-run'] ) ) {
+			WP_CLI::log(
+				array() === $pending
+					? 'Nothing pending.'
+					: sprintf( 'Would apply %d migration(s) in order: %s.', count( $pending ), implode( ', ', array_column( $pending, 'id' ) ) )
+			);
+			return;
+		}
+
+		if ( array() === $pending ) {
+			WP_CLI::success( 'Nothing to apply.' );
+			return;
+		}
+
+		$result = Migrations::run();
+
+		foreach ( $result['applied'] as $id ) {
+			WP_CLI::log( "Applied {$id}." );
+		}
+
+		if ( null !== $result['error'] ) {
+			WP_CLI::error( $result['error'] ); // Non-zero exit: the deploy hook aborts.
+		}
+
+		WP_CLI::success( sprintf( 'Applied %d migration(s).', count( $result['applied'] ) ) );
 	}
 
 	/**

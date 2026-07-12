@@ -44,6 +44,10 @@ class SiteHealth implements Module {
 				'label'    => __( 'Search engine visibility', 'upsun-mu-plugin' ),
 				'callback' => array( self::class, 'check_search_visibility' ),
 			),
+			'migrations'        => array(
+				'label'    => __( 'Deploy migrations', 'upsun-mu-plugin' ),
+				'callback' => array( \Upsun\Migrations::class, 'check' ),
+			),
 		);
 
 		/**

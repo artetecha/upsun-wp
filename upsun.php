@@ -15,12 +15,13 @@ if ( defined( 'UPSUN_MU_PLUGIN_DIR' ) ) {
 }
 
 define( 'UPSUN_MU_PLUGIN_DIR', __DIR__ );
-define( 'UPSUN_MU_PLUGIN_VERSION', '0.3.2' );
+define( 'UPSUN_MU_PLUGIN_VERSION', '0.3.3' );
 
 require_once __DIR__ . '/src/Environment.php';
 require_once __DIR__ . '/src/helpers.php';
 require_once __DIR__ . '/src/CacheCheck.php';
 require_once __DIR__ . '/src/Sanitizers.php';
+require_once __DIR__ . '/src/Migrations.php';
 require_once __DIR__ . '/src/Module.php';
 require_once __DIR__ . '/src/ModuleRegistry.php';
 require_once __DIR__ . '/src/Integration.php';
