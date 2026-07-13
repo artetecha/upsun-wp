@@ -4,7 +4,7 @@
   "type": "wordpress-muplugin",
   "version": "0.3.4",
   "license": "MIT",
-  "homepage": "https://upsun.com",
+  "homepage": "https://upsun.artetecha.com/",
   "keywords": [
     "wordpress",
     "upsun",
@@ -32,6 +32,7 @@
     "exclude": [
       "/vendor",
       "/tests",
+      "/site",
       "/composer.lock",
       "/phpunit.xml.dist",
       "/.phpunit.cache",

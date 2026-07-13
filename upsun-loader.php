@@ -1,11 +1,10 @@
 <?php
 /**
  * Plugin Name: Upsun
- * Plugin URI: https://upsun.com
- * Description: Platform integration for WordPress on Upsun. Loads the Upsun must-use plugin from mu-plugins/upsun/.
- * Version: 0.1.0
- * Author: Upsun
- * Author URI: https://upsun.com
+ * Plugin URI: https://upsun.artetecha.com/
+ * Description: Platform integration for WordPress on Upsun. Loads the Upsun must-use plugin from mu-plugins/upsun/. The plugin version lives in the package composer.json / UPSUN_MU_PLUGIN_VERSION.
+ * Author: Vince Russo
+ * Author URI: https://artetecha.com
  * License: MIT
  *
  * WordPress does not scan mu-plugin subdirectories, so this shim must sit at

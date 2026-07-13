@@ -153,11 +153,11 @@ final class SafePreviewsTest extends TestCase {
 		$atts = ( new SafePreviews() )->maybe_redirect_mail(
 			array(
 				'to'      => 'one@example.com',
-				'headers' => "From: KEDS <noreply@example.com>\r\n",
+				'headers' => "From: Example <noreply@example.com>\r\n",
 			)
 		);
 
-		$this->assertStringContainsString( "From: KEDS <noreply@example.com>\r\nX-Upsun-Original-To: one@example.com", $atts['headers'] );
+		$this->assertStringContainsString( "From: Example <noreply@example.com>\r\nX-Upsun-Original-To: one@example.com", $atts['headers'] );
 	}
 
 	/* Fresh-clone detection. */
