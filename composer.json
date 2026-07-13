@@ -1,10 +1,19 @@
 {
-  "name": "upsun/wordpress-mu-plugin",
-  "description": "Must-use plugin integrating WordPress with the Upsun platform: environment awareness, router-cache friendliness, read-only filesystem UX, Site Health checks, and a wp upsun CLI command.",
+  "name": "artetecha/upsun-wp",
+  "description": "Must-use plugin integrating WordPress with the Upsun platform: environment awareness, router-cache friendliness, safe preview clones, deploy migrations, Site Health checks, and a wp upsun CLI command.",
   "type": "wordpress-muplugin",
-  "version": "0.3.4",
   "license": "MIT",
   "homepage": "https://upsun.artetecha.com/",
+  "authors": [
+    {
+      "name": "Vince Russo",
+      "homepage": "https://artetecha.com"
+    }
+  ],
+  "support": {
+    "issues": "https://github.com/artetecha/upsun-wp/issues",
+    "source": "https://github.com/artetecha/upsun-wp"
+  },
   "keywords": [
     "wordpress",
     "upsun",

@@ -1,10 +1,12 @@
-# Upsun WordPress mu-plugin
+# upsun-wp — the Upsun mu-plugin for WordPress
 
-Platform integration for WordPress running on [Upsun](https://upsun.com): environment awareness, router-cache friendliness, read-only-filesystem UX, Upsun-specific Site Health checks, and a `wp upsun` CLI command.
+Platform integration for WordPress running on [Upsun](https://upsun.com): environment awareness, router-cache friendliness, safe preview clones, deploy migrations, Upsun-specific Site Health checks, and a `wp upsun` CLI command.
+
+**Site & docs: [upsun.artetecha.com](https://upsun.artetecha.com/)**
 
 The plugin detects Upsun at runtime (`PLATFORM_APPLICATION_NAME` + `PLATFORM_ENVIRONMENT`) and **fully no-ops anywhere else** — local development and CI need no special-casing. It reads platform variables directly and never defines WordPress configuration constants: your `wp-config.php` stays the single owner of database credentials, URLs, salts, and `WP_ENVIRONMENT_TYPE`.
 
-This is a generic plugin for any WordPress project on Upsun. It currently lives inside the KEDS repository, which acts as its first consumer and test bed, and will be extracted to an independent repository as it stabilizes (see [ROADMAP.md](ROADMAP.md)). Site-specific behavior belongs in the consuming project via the filters below — never in this package.
+This is a generic plugin for any WordPress project on Upsun; site-specific behavior belongs in the consuming project via the filters below — never in this package. It was built for, and is battle-tested by, its first customer: a production LMS/commerce site consuming it exclusively through the public filter/constant API. A companion starter repository — a deploy-ready Composer WordPress on Upsun, pre-wired for this plugin — is on its way.
 
 ## Installation (Composer-managed WordPress)
 
@@ -16,11 +18,8 @@ post_deploy hook.
 ```jsonc
 // composer.json
 {
-  "repositories": [
-    { "type": "path", "url": "packages/upsun-mu-plugin", "options": { "symlink": false } }
-  ],
   "require": {
-    "upsun/wordpress-mu-plugin": "*"
+    "artetecha/upsun-wp": "^0.3"
   },
   "extra": {
     "installer-paths": {
@@ -37,8 +36,6 @@ post_deploy hook.
   "cp wordpress/wp-content/mu-plugins/upsun/upsun-loader.php wordpress/wp-content/mu-plugins/upsun-loader.php"
 ]
 ```
-
-**Path-repository note:** with `symlink: false` and a pinned `version`, local edits to the package only propagate after `composer reinstall upsun/wordpress-mu-plugin` (or a version bump).
 
 **3. Wire preview sanitize into the post_deploy hook.** Data syncs redeploy an environment **without a code change, so only the `post_deploy` hook runs** — `deploy` does not, which makes `post_deploy` the only hook that can catch every clone and resync. Add one line to `.upsun/config.yaml` that is safe on every environment (production refreshes the stamp that makes its clones detectable; already-sanitized previews no-op):
 

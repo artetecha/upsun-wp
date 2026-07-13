@@ -353,26 +353,19 @@ daily premium-update PRs). Three layers, two homes:
 
 ---
 
-## Extraction to an independent repo — in progress
+## Extraction to an independent repo — done (this repo)
 
 Trigger (fired 2026-07-12 with 0.3.4): a second real consumer, or v0.3
-shipping — whichever came first.
+shipping — whichever came first. This repository is the result: split from
+the first customer's monorepo with full history on 2026-07-13, renamed to
+`artetecha/upsun-wp`, with CI (PHP 8.1 + 8.4 matrix + a WP-integration
+smoke job) and the landing page on GitHub Pages at `upsun.artetecha.com`.
 
-Steps:
+Remaining steps:
 
-1. Split `keds/packages/upsun-mu-plugin/` into its own repository with history
-   (`git filter-repo --subdirectory-filter`) → `github.com/artetecha/upsun-wp`.
-2. In the new repo: rename the package to `artetecha/upsun-wp` (Composer name
-   only — the `Upsun\` namespace, `UPSUN_*` constants, `upsun_*` filters,
-   `installer-name: upsun`, and the product name all stay); drop the
-   composer.json `version` field (git tags become the authority); port the
-   unit-test workflow (PHP 8.1 + 8.4 matrix) as CI plus a WP-integration
-   smoke job; deploy the `site/` landing page to GitHub Pages via Actions
-   with the custom domain `upsun.artetecha.com` (DNS CNAME →
-   `artetecha.github.io`).
-3. Publish `artetecha/upsun-wp` on Packagist; tag `0.3.4`. `archive.exclude`
-   starts applying to dist installs (tests and the site stop shipping to
-   consumers).
+3. Publish `artetecha/upsun-wp` on Packagist (tag `0.3.4` exists).
+   `archive.exclude` applies to dist installs (tests and the site do not
+   ship to consumers).
 4. KEDS swaps the path repository for a Packagist version constraint (`^0.3`)
    — a two-line `composer.json` change; the loader-shim postbuild line is
    unchanged. The `upsun-mu-plugin` CI job retires (the plugin repo owns its
@@ -384,5 +377,4 @@ Steps:
    aren't activatable and the loader-shim install step doesn't fit the plugin
    directory model (and wpackagist only mirrors wordpress.org).
 
-Until the split lands, this directory is the source of truth and the KEDS
-repo's CI is the plugin's CI.
+This repository is now the source of truth.

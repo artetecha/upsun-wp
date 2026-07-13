@@ -1,0 +1,112 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: PHPUnit (PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 8.1 enforces the package's PHP floor.
+        php: ['8.1', '8.4']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          tools: composer
+          coverage: none
+
+      # No committed lock file: dev deps resolve per PHP version.
+      - run: composer install --no-interaction --no-progress --prefer-dist
+
+      - run: vendor/bin/phpunit
+
+  smoke:
+    name: WP integration smoke
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: wp
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=3s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mysqli
+          tools: composer, wp-cli
+          coverage: none
+
+      # A throwaway consumer project: WordPress core + this package via a
+      # path repository, installed the way real consumers install it.
+      - name: Build consumer project
+        run: |
+          mkdir consumer && cd consumer
+          cat > composer.json <<'JSON'
+          {
+            "repositories": [
+              { "type": "path", "url": "../plugin", "options": { "symlink": false } }
+            ],
+            "require": {
+              "artetecha/upsun-wp": "*",
+              "johnpbloch/wordpress-core": "^7.0",
+              "johnpbloch/wordpress-core-installer": "^2.0",
+              "composer/installers": "^2.0"
+            },
+            "extra": {
+              "wordpress-install-dir": "wordpress",
+              "installer-paths": {
+                "wordpress/wp-content/mu-plugins/{$name}": ["type:wordpress-muplugin"]
+              }
+            },
+            "config": {
+              "allow-plugins": {
+                "composer/installers": true,
+                "johnpbloch/wordpress-core-installer": true
+              }
+            }
+          }
+          JSON
+          composer install --no-interaction --no-progress
+          test -f wordpress/wp-content/mu-plugins/upsun/upsun.php
+          cp wordpress/wp-content/mu-plugins/upsun/upsun-loader.php wordpress/wp-content/mu-plugins/upsun-loader.php
+
+      - name: Install WordPress
+        working-directory: consumer/wordpress
+        run: |
+          wp config create --dbname=wp --dbuser=root --dbpass=root --dbhost=127.0.0.1
+          wp core install --url=http://localhost --title=Smoke \
+            --admin_user=admin --admin_password=smoke-only --admin_email=smoke@example.invalid --skip-email
+
+      # Off-platform, the plugin must load its API and fully no-op.
+      - name: Assert loader shim and off-platform no-op
+        working-directory: consumer/wordpress
+        run: |
+          wp eval 'exit( function_exists( "Upsun\\is_upsun" ) && ! Upsun\is_upsun() ? 0 : 1 );'
+          wp upsun info | grep -q "Not running on Upsun"
+          wp upsun doctor | grep -q "Not running on Upsun"
