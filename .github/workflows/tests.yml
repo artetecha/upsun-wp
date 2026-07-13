@@ -62,8 +62,11 @@ jobs:
           tools: composer, wp-cli
           coverage: none
 
-      # A throwaway consumer project: WordPress core + this package via a
-      # path repository, installed the way real consumers install it.
+      # A throwaway consumer project using the documented inside-core-dir
+      # pattern: the package routes to a staging directory (core extraction
+      # replaces the whole wordpress/ tree, and alphabetical install order
+      # puts artetecha/* before johnpbloch/*), then a postbuild script
+      # copies it in with the loader shim — exactly what the README says.
       - name: Build consumer project
         run: |
           mkdir consumer && cd consumer
@@ -81,8 +84,19 @@ jobs:
             "extra": {
               "wordpress-install-dir": "wordpress",
               "installer-paths": {
+                "composer-mu-plugins/{$name}": ["artetecha/upsun-wp"],
                 "wordpress/wp-content/mu-plugins/{$name}": ["type:wordpress-muplugin"]
               }
+            },
+            "scripts": {
+              "postbuild": [
+                "mkdir -p wordpress/wp-content/mu-plugins",
+                "rm -rf wordpress/wp-content/mu-plugins/upsun",
+                "cp -R composer-mu-plugins/upsun wordpress/wp-content/mu-plugins/upsun",
+                "cp composer-mu-plugins/upsun/upsun-loader.php wordpress/wp-content/mu-plugins/upsun-loader.php"
+              ],
+              "post-install-cmd": "@postbuild",
+              "post-update-cmd": "@postbuild"
             },
             "config": {
               "allow-plugins": {
@@ -94,7 +108,7 @@ jobs:
           JSON
           composer install --no-interaction --no-progress
           test -f wordpress/wp-content/mu-plugins/upsun/upsun.php
-          cp wordpress/wp-content/mu-plugins/upsun/upsun-loader.php wordpress/wp-content/mu-plugins/upsun-loader.php
+          test -f wordpress/wp-content/mu-plugins/upsun-loader.php
 
       - name: Install WordPress
         working-directory: consumer/wordpress

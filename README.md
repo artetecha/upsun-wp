@@ -10,8 +10,8 @@ This is a generic plugin for any WordPress project on Upsun; site-specific behav
 
 ## Installation (Composer-managed WordPress)
 
-Three steps: require the package, copy the loader shim, and wire the
-post_deploy hook.
+Three steps: require the package, route the install path (and copy the
+loader shim), and wire the post_deploy hook.
 
 **1. Require the package**
 
@@ -20,22 +20,60 @@ post_deploy hook.
 {
   "require": {
     "artetecha/upsun-wp": "^0.3"
-  },
-  "extra": {
-    "installer-paths": {
-      "wordpress/wp-content/mu-plugins/{$name}": ["type:wordpress-muplugin"]
-    }
   }
 }
 ```
 
-**2. Copy the loader shim.** The package installs into `mu-plugins/upsun/`, and WordPress does not scan mu-plugin subdirectories, so copy the shim to the mu-plugins root in your build, e.g. as a Composer script:
+**2. Route the install path and copy the loader shim.** WordPress does not
+scan mu-plugin subdirectories, so a shim always has to reach the mu-plugins
+root; where the package itself may install depends on your layout.
+
+*Content directory OUTSIDE the core install dir* (Bedrock-style): the
+standard route works — the package lands in `mu-plugins/upsun/` (via its
+`installer-name`) and only the shim needs copying:
 
 ```json
-"post-install-cmd": [
-  "cp wordpress/wp-content/mu-plugins/upsun/upsun-loader.php wordpress/wp-content/mu-plugins/upsun-loader.php"
-]
+"extra": {
+  "installer-paths": {
+    "web/app/mu-plugins/{$name}": ["type:wordpress-muplugin"]
+  }
+},
+"scripts": {
+  "post-install-cmd": [
+    "cp web/app/mu-plugins/upsun/upsun-loader.php web/app/mu-plugins/upsun-loader.php"
+  ]
+}
 ```
+
+*Content directory INSIDE the core install dir* (johnpbloch-style
+`wordpress/wp-content/...`): **do not route this package into
+`wordpress/`.** Composer installs independent packages in alphabetical
+order; `artetecha/*` sorts before `johnpbloch/*`, and the WordPress core
+extraction replaces the entire install dir — silently deleting anything
+placed there earlier. Route the package to a staging directory and copy it
+in with the shim:
+
+```json
+"extra": {
+  "installer-paths": {
+    "composer-mu-plugins/{$name}": ["artetecha/upsun-wp"],
+    "wordpress/wp-content/mu-plugins/{$name}": ["type:wordpress-muplugin"]
+  }
+},
+"scripts": {
+  "postbuild": [
+    "mkdir -p wordpress/wp-content/mu-plugins",
+    "rm -rf wordpress/wp-content/mu-plugins/upsun",
+    "cp -R composer-mu-plugins/upsun wordpress/wp-content/mu-plugins/upsun",
+    "cp composer-mu-plugins/upsun/upsun-loader.php wordpress/wp-content/mu-plugins/upsun-loader.php"
+  ],
+  "post-install-cmd": "@postbuild",
+  "post-update-cmd": "@postbuild"
+}
+```
+
+(Add `/composer-mu-plugins/` and the copied files to `.gitignore`; scripts
+run after every install, so the copy is always fresh.)
 
 **3. Wire preview sanitize into the post_deploy hook.** Data syncs redeploy an environment **without a code change, so only the `post_deploy` hook runs** — `deploy` does not, which makes `post_deploy` the only hook that can catch every clone and resync. Add one line to `.upsun/config.yaml` that is safe on every environment (production refreshes the stamp that makes its clones detectable; already-sanitized previews no-op):
 
