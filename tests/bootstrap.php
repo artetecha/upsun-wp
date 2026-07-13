@@ -199,6 +199,13 @@ function wp_cache_flush() {
 	return true;
 }
 
+// Fresh-database simulation for the pre-install scheduler guards.
+$GLOBALS['upsun_test_blog_installed'] = true;
+
+function is_blog_installed() {
+	return $GLOBALS['upsun_test_blog_installed'];
+}
+
 // Cron stubs: a flat store of scheduled hooks.
 $GLOBALS['upsun_test_cron'] = array();
 

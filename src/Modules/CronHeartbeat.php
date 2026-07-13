@@ -37,6 +37,13 @@ class CronHeartbeat implements Module {
 	}
 
 	public function schedule(): void {
+		// A CLI boot against a fresh database (e.g. `wp core is-installed`
+		// during the first deploy) fires init before any tables exist;
+		// writing the cron array there only produces DB-error noise.
+		if ( function_exists( 'is_blog_installed' ) && ! is_blog_installed() ) {
+			return;
+		}
+
 		if ( false === wp_next_scheduled( self::HOOK ) ) {
 			wp_schedule_event( time(), self::schedule_name(), self::HOOK );
 		}

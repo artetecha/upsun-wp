@@ -120,6 +120,15 @@ final class MountUsageTest extends TestCase {
 		$this->assertSame( $first, $GLOBALS['upsun_test_cron'][ MountUsage::HOOK ] );
 	}
 
+	public function test_schedule_noops_before_wordpress_is_installed(): void {
+		$GLOBALS['upsun_test_blog_installed'] = false;
+
+		( new MountUsage() )->schedule();
+
+		$this->assertArrayNotHasKey( MountUsage::HOOK, $GLOBALS['upsun_test_cron'] );
+		$GLOBALS['upsun_test_blog_installed'] = true;
+	}
+
 	public function test_register_joins_the_panel_registry(): void {
 		( new MountUsage() )->register();
 

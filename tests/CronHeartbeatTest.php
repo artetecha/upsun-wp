@@ -30,6 +30,15 @@ final class CronHeartbeatTest extends TestCase {
 		$this->assertSame( $first, $GLOBALS['upsun_test_cron'][ CronHeartbeat::HOOK ] );
 	}
 
+	public function test_schedule_noops_before_wordpress_is_installed(): void {
+		$GLOBALS['upsun_test_blog_installed'] = false;
+
+		( new CronHeartbeat() )->schedule();
+
+		$this->assertArrayNotHasKey( CronHeartbeat::HOOK, $GLOBALS['upsun_test_cron'] );
+		$GLOBALS['upsun_test_blog_installed'] = true;
+	}
+
 	public function test_beat_stamps_the_option(): void {
 		( new CronHeartbeat() )->beat();
 
