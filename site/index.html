@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Upsun mu-plugin for WordPress — platform-native WordPress</title>
+<meta name="description" content="A must-use plugin that makes WordPress a first-class citizen on Upsun: environment awareness, router-cache friendliness, safe preview clones, and a wp upsun CLI. Fully no-ops anywhere else.">
+<link rel="canonical" href="https://upsun.artetecha.com/">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="stylesheet" href="style.css">
+<script>
+/* Apply a stored theme override before first paint (no FOUC). */
+(function () {
+  try {
+    var t = localStorage.getItem('upsun-site-theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+})();
+</script>
+</head>
+<body>
+
+<a class="skip-link" href="#approach">Skip to content</a>
+
+<header class="site-header">
+  <nav class="nav container" aria-label="Main">
+    <a class="brand" href="#top">
+      <span class="brand-mark" aria-hidden="true">&gt;_</span>
+      <span class="brand-name">artetecha/upsun-wp</span>
+    </a>
+    <button class="nav-toggle" aria-expanded="false" aria-controls="nav-links" aria-label="Toggle navigation">
+      <span></span><span></span><span></span>
+    </button>
+    <ul class="nav-links" id="nav-links">
+      <li><a href="#approach">The approach</a></li>
+      <li><a href="#safe-previews">SafePreviews</a></li>
+      <li><a href="#modules">Modules</a></li>
+      <li><a href="#cli">CLI</a></li>
+      <li><a href="#install">Install</a></li>
+      <li><a href="#roadmap">Roadmap</a></li>
+      <li><a class="nav-cta" href="#install">Get started</a></li>
+    </ul>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch color theme">
+      <span class="theme-icon" aria-hidden="true">◐</span><span class="theme-label">auto</span>
+    </button>
+  </nav>
+</header>
+
+<main id="top">
+
+<!-- ============================================================ HERO -->
+<section class="hero">
+  <div class="container hero-grid">
+    <div class="hero-copy reveal">
+      <p class="hero-kicker"><span class="pulse-dot" aria-hidden="true"></span> WordPress, running like it's 2026</p>
+      <h1>Make WordPress a <br><em>platform-native</em> citizen <br>on Upsun.</h1>
+      <p class="hero-sub">
+        A single must-use plugin that teaches WordPress everything about the platform it runs on:
+        environment awareness, router-cache friendliness, read-only-filesystem UX, Site&nbsp;Health
+        checks that understand Upsun, and a <code>wp upsun</code> CLI command.
+        Off-platform it <strong>fully no-ops</strong> — local dev and CI need no special-casing.
+      </p>
+      <ul class="badge-row" aria-label="Project facts">
+        <li class="badge badge-version">v0.3.4</li>
+        <li class="badge">MIT</li>
+        <li class="badge">PHP 8.1+</li>
+        <li class="badge">WordPress 6.0+</li>
+        <li class="badge">Composer-first</li>
+        <li class="badge">Zero runtime deps</li>
+      </ul>
+      <div class="code-block hero-install" data-copy>
+        <span class="code-lang">shell</span>
+        <pre><code><span class="tok-p">$</span> composer require artetecha/upsun-wp</code></pre>
+      </div>
+      <div class="hero-ctas">
+        <a class="btn btn-primary" href="#install">Get started</a>
+        <a class="btn btn-ghost" href="#modules">Explore the modules</a>
+      </div>
+    </div>
+
+    <div class="hero-terminal reveal">
+      <div class="terminal" id="hero-terminal" aria-label="Terminal demo of wp upsun doctor">
+        <div class="terminal-bar">
+          <span class="tdot tdot-r"></span><span class="tdot tdot-y"></span><span class="tdot tdot-g"></span>
+          <span class="terminal-title">app@web.0 — feature/checkout</span>
+        </div>
+        <div class="terminal-body" id="terminal-body" aria-live="off"></div>
+      </div>
+      <p class="terminal-caption">Real subcommands. Real checks. <a href="#cli">See the CLI →</a></p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ APPROACH -->
+<section class="section" id="approach">
+  <div class="container">
+    <header class="section-head reveal">
+      <p class="section-kicker">Why bother</p>
+      <h2>Retire the WordPress workflow you inherited.</h2>
+      <p class="section-sub">
+        Traditional WordPress operations were designed for a single mutable server.
+        Upsun gives you immutable builds, instant production clones, and config from the
+        environment — this plugin closes the gap so WordPress actually behaves that way.
+      </p>
+    </header>
+
+    <div class="versus reveal" role="table" aria-label="Traditional WordPress versus the Upsun approach">
+      <div class="versus-header" role="row">
+        <div class="versus-topic" role="columnheader"></div>
+        <div class="versus-old" role="columnheader"><span class="tag tag-old">The old way</span></div>
+        <div class="versus-new" role="columnheader"><span class="tag tag-new">The Upsun way</span></div>
+      </div>
+      <div class="versus-row" role="row">
+        <div class="versus-topic" role="cell">Deploys</div>
+        <div class="versus-old" role="cell">FTP uploads and cowboy edits on the live box. “Did anyone back up first?”</div>
+        <div class="versus-new" role="cell"><code>git push</code> → build → deploy. Immutable, repeatable, one-command rollback.</div>
+      </div>
+      <div class="versus-row" role="row">
+        <div class="versus-topic" role="cell">Updates</div>
+        <div class="versus-old" role="cell">One-click plugin updates in wp-admin, straight into production, no record of what changed.</div>
+        <div class="versus-new" role="cell">Composer owns every version in a lockfile. The filesystem is read-only — the plugin disables the in-app updaters and removes the Site Health tests that would fail by design.</div>
+      </div>
+      <div class="versus-row" role="row">
+        <div class="versus-topic" role="cell">Staging</div>
+        <div class="versus-old" role="cell">A hand-built staging site that drifted from production months ago.</div>
+        <div class="versus-new" role="cell">Every branch becomes a full environment — code, database, files — cloned from production in minutes.</div>
+      </div>
+      <div class="versus-row" role="row">
+        <div class="versus-topic" role="cell">Clone safety</div>
+        <div class="versus-old" role="cell">Staging quietly emails real customers and talks to live payment APIs.</div>
+        <div class="versus-new" role="cell">SafePreviews neuters live outbound integrations at boot: mail intercepted, Stripe forced to test mode, webhooks paused.</div>
+      </div>
+      <div class="versus-row" role="row">
+        <div class="versus-topic" role="cell">Config</div>
+        <div class="versus-old" role="cell">Credentials hardcoded per server in <code>wp-config.php</code>, copied around by hand.</div>
+        <div class="versus-new" role="cell">Config comes from the environment. The plugin reads <code>PLATFORM_*</code> directly and never defines constants — your <code>wp-config.php</code> stays the single owner.</div>
+      </div>
+      <div class="versus-row" role="row">
+        <div class="versus-topic" role="cell">Caching</div>
+        <div class="versus-old" role="cell">A zoo of page-cache plugins fighting each other with drop-ins.</div>
+        <div class="versus-new" role="cell">Honest <code>Cache-Control</code> headers drive the platform router’s cache. <code>wp upsun cache-check</code> explains any page’s verdict.</div>
+      </div>
+      <div class="versus-row" role="row">
+        <div class="versus-topic" role="cell">DB changes</div>
+        <div class="versus-old" role="cell">“Run this SQL on prod after you deploy” — a sticky note as release engineering.</div>
+        <div class="versus-new" role="cell">Ordered, once-per-database deploy migrations via <code>wp upsun migrate</code>. A failure aborts the deploy before traffic switches.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ PRINCIPLES -->
+<section class="section section-alt" id="principles">
+  <div class="container">
+    <header class="section-head reveal">
+      <p class="section-kicker">Design principles</p>
+      <h2>Boring rules, applied ruthlessly.</h2>
+    </header>
+    <div class="principles reveal">
+      <article class="principle">
+        <h3><span class="principle-num">01</span> Generic first</h3>
+        <p>A feature lands here only if it helps <em>any</em> WordPress site on Upsun. Site-specific behavior belongs in your project, via public filters.</p>
+      </article>
+      <article class="principle">
+        <h3><span class="principle-num">02</span> No-op everywhere else</h3>
+        <p>Off-platform — local, CI — the plugin loads and does nothing. Malformed platform data degrades silently, never fatals.</p>
+      </article>
+      <article class="principle">
+        <h3><span class="principle-num">03</span> wp-config wins</h3>
+        <p>The plugin never defines configuration constants. It reads env and constants, and fills runtime-behavior gaps only.</p>
+      </article>
+      <article class="principle">
+        <h3><span class="principle-num">04</span> Honest about the platform</h3>
+        <p>No feature that pretends an API exists. Limitations are documented instead of papered over — see the router-cache purge story in the <a href="#roadmap">roadmap</a>.</p>
+      </article>
+      <article class="principle">
+        <h3><span class="principle-num">05</span> Every module unit-tested</h3>
+        <p>PHPUnit against WP stubs — no WordPress install required. Thirteen test suites, one per module or subsystem, on a PHP 8.1→8.4 CI matrix.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ SAFE PREVIEWS -->
+<section class="section" id="safe-previews">
+  <div class="container">
+    <div class="spotlight reveal">
+      <div class="spotlight-copy">
+        <p class="section-kicker section-kicker-warn">Flagship module</p>
+        <h2>Preview environments are perfect clones.<br>That’s the feature — <em>and the hazard.</em></h2>
+        <p>
+          Upsun previews are byte-for-byte clones of production — <strong>including live payment
+          keys, webhook URLs, and CRM credentials</strong>. Click around a naive clone and it will
+          happily email real customers and notify real fulfillment systems.
+        </p>
+        <p>
+          <strong>SafePreviews</strong> neuters live outbound integrations on every preview,
+          at runtime, from boot — no DB writes, nothing to undo:
+        </p>
+        <ul class="check-list">
+          <li><strong>Mail interception</strong> — <code>wp_mail</code> is intercepted (or redirected to an inbox you choose) on every preview request.</li>
+          <li><strong>Stripe test mode, forced</strong> — at option-read time. Cloned live keys stay untouched and unused; missing test keys fail safe.</li>
+          <li><strong>Webhook delivery paused</strong> — WooCommerce stops notifying external systems from clones.</li>
+          <li><strong>Your integrations too</strong> — the same protection registry is open via <code>upsun_safe_previews_actions</code>, and one-time DB scrubbing hooks into <code>upsun_preview_sanitize</code>.</li>
+        </ul>
+      </div>
+      <div class="spotlight-aside">
+        <div class="code-block" data-copy>
+          <span class="code-lang">.upsun/config.yaml</span>
+          <pre><code><span class="tok-k">hooks</span>:
+  <span class="tok-k">post_deploy</span>: |
+    <span class="tok-s">wp upsun sanitize --if-needed</span></code></pre>
+        </div>
+        <p class="aside-note">
+          One line catches every clone <em>and</em> every data re-sync — <code>post_deploy</code>
+          is the only hook that runs on both. Fresh clones are detected via an environment stamp;
+          already-sanitized previews no-op; production just refreshes the stamp.
+        </p>
+        <div class="stamp-flow" aria-label="How clone detection works">
+          <div class="stamp-step"><span class="stamp-env stamp-prod">production</span> writes stamp</div>
+          <div class="stamp-arrow" aria-hidden="true">→ clone →</div>
+          <div class="stamp-step"><span class="stamp-env stamp-dev">preview</span> sees foreign stamp → sanitizes once</div>
+        </div>
+        <p class="aside-note aside-note-dim">
+          Opt-in DB sanitizers (all disabled by default): anonymize user emails, anonymize
+          passwords, deactivate listed plugins, scrub listed options — declared once, in
+          versioned config, applied identically to every child environment.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ MODULES -->
+<section class="section section-alt" id="modules">
+  <div class="container">
+    <header class="section-head reveal">
+      <p class="section-kicker">Eleven modules</p>
+      <h2>Everything WordPress needs to know about its platform.</h2>
+      <p class="section-sub">
+        Each module is independently switchable — a <code>UPSUN_DISABLE_*</code> constant in
+        <code>wp-config.php</code> or the <code>upsun_mu_modules</code> filter — and ships with
+        its own unit tests.
+      </p>
+    </header>
+    <div class="card-grid reveal">
+      <article class="card">
+        <p class="card-kicker">environment-indicator</p>
+        <h3>Always know where you are</h3>
+        <p>Color-coded admin-bar badge (branch · environment type) with a Console link, a dashboard widget, and a matching login-screen banner.</p>
+        <div class="env-chips" aria-hidden="true">
+          <span class="chip chip-prod">production</span>
+          <span class="chip chip-stage">staging</span>
+          <span class="chip chip-dev">development</span>
+        </div>
+      </article>
+      <article class="card">
+        <p class="card-kicker">page-cache</p>
+        <h3>Router-cache friendliness</h3>
+        <p>Emits <code>Cache-Control: public, s-maxage={ttl}</code> on anonymous, session-free views so the router can cache them; optionally strips cookie spoilers. Commerce bypass patterns come from the integrations layer.</p>
+      </article>
+      <article class="card">
+        <p class="card-kicker">safe-previews</p>
+        <h3>Clones that can’t hurt anyone</h3>
+        <p>Mail interception, payment test mode, webhook pausing — live integrations neutered at boot on every preview. <a href="#safe-previews">The full story ↑</a></p>
+      </article>
+      <article class="card">
+        <p class="card-kicker">updates-policy</p>
+        <h3>Read-only, explained</h3>
+        <p>Disables the in-app auto-update machinery (Composer is the update path), replaces the toggles with a note, and removes core Site Health tests that would fail by design.</p>
+      </article>
+      <article class="card">
+        <p class="card-kicker">site-health</p>
+        <h3>Checks that understand Upsun</h3>
+        <p>Object-cache round-trip, cron configuration, writable mounts, preview search visibility — in Site Health, plus an “Upsun” section in the Info tab. Same registry powers <code>wp upsun doctor</code>.</p>
+      </article>
+      <article class="card">
+        <p class="card-kicker">dashboard</p>
+        <h3>A platform home in wp-admin</h3>
+        <p>Top-level “Upsun” page built from real core meta boxes — collapsible, draggable, per-user layout. Environment, services, health, caching, module status. Actions, not settings: configuration stays in code.</p>
+      </article>
+      <article class="card">
+        <p class="card-kicker">cron-heartbeat</p>
+        <h3>Proof cron actually runs</h3>
+        <p>A recurring event stamps a timestamp; staleness (2× schedule warns, 4× fails) and overdue-event counts surface in Site Health, the dashboard, and <code>wp upsun doctor</code>.</p>
+      </article>
+      <article class="card">
+        <p class="card-kicker">preview-protection</p>
+        <h3>Invisible to search engines</h3>
+        <p><code>X-Robots-Tag: noindex, nofollow</code> and robots meta on non-production — without touching <code>blog_public</code>, because that database is a production clone.</p>
+      </article>
+      <article class="card">
+        <p class="card-kicker">smtp</p>
+        <h3>Mail that just works</h3>
+        <p>Points PHPMailer at the on-platform relay (<code>PLATFORM_SMTP_HOST</code>) unless a mailer plugin already configured SMTP.</p>
+      </article>
+      <article class="card">
+        <p class="card-kicker">writable-paths</p>
+        <h3>Mounts, advised</h3>
+        <p>Integrations declare where plugins write; the check compares that against your declared mounts, and <code>wp upsun mounts</code> prints ready-to-paste YAML for anything missing. Advisory by design — on Upsun the fix is a mount.</p>
+      </article>
+      <article class="card">
+        <p class="card-kicker">mount-usage</p>
+        <h3>See the disk before it’s full</h3>
+        <p>Live disk total/free from the mount filesystem — warns at 80% used, fails at 95%, because a full mount is a rude way to discover a quota. A per-mount size breakdown, computed daily, lands in a “Disk &amp; mounts” dashboard panel.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ CLI -->
+<section class="section" id="cli">
+  <div class="container cli-grid">
+    <header class="section-head reveal">
+      <p class="section-kicker">wp upsun</p>
+      <h2>An ops toolbox inside WP-CLI.</h2>
+      <p class="section-sub">
+        Deploy-hook friendly: meaningful exit codes, machine-readable
+        <code>--format=json|yaml|csv</code>, and every command prints
+        “Not running on Upsun.” and exits 0 off-platform.
+      </p>
+      <div class="code-block" data-copy>
+        <span class="code-lang">shell</span>
+        <pre><code><span class="tok-p">$</span> wp upsun cache-check /shop/ --cookie=<span class="tok-s">"tracking=1"</span>
+<span class="tok-dim">Verdict for /shop/:</span>
+  <span class="tok-ok">cacheable</span> — s-maxage=600
+  Set-Cookie spoilers ..... none
+  Bypass patterns ......... no match
+  Router fetch ............ <span class="tok-ok">HIT</span> (age 214s)</code></pre>
+      </div>
+    </header>
+    <div class="cli-list reveal" role="list">
+      <div class="cli-item" role="listitem">
+        <code class="cli-cmd">wp upsun info</code>
+        <p>Project, environment, branch, and routes at a glance.</p>
+      </div>
+      <div class="cli-item" role="listitem">
+        <code class="cli-cmd">wp upsun doctor</code>
+        <p>Runs every health check; exits non-zero on failure — wire it into your deploy hook as a gate.</p>
+      </div>
+      <div class="cli-item" role="listitem">
+        <code class="cli-cmd">wp upsun relationships</code>
+        <p>Services this app can talk to — credentials never printed. <code>--health</code> probes each one live: MySQL ping, Redis INFO, HTTP/cluster status.</p>
+      </div>
+      <div class="cli-item" role="listitem">
+        <code class="cli-cmd">wp upsun cache flush</code>
+        <p>Flushes the object cache — and is honest that the router cache has no purge API.</p>
+      </div>
+      <div class="cli-item" role="listitem">
+        <code class="cli-cmd">wp upsun cache-check &lt;url&gt;</code>
+        <p>Answers the #1 WordPress-on-Upsun support question — “why isn’t my page cached?” — with an itemized verdict.</p>
+      </div>
+      <div class="cli-item" role="listitem">
+        <code class="cli-cmd">wp upsun mounts</code>
+        <p>Declared mounts, plus ready-to-paste YAML for every writable path your plugins need but don’t have.</p>
+      </div>
+      <div class="cli-item" role="listitem">
+        <code class="cli-cmd">wp upsun migrate</code>
+        <p>Applies pending deploy migrations in order, once per database. <code>--dry-run</code> to preview; a failure aborts the deploy.</p>
+      </div>
+      <div class="cli-item" role="listitem">
+        <code class="cli-cmd">wp upsun sanitize</code>
+        <p>Fires preview sanitization (refuses on production). <code>--if-needed</code> is stamp-aware and safe on every environment.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ ECOSYSTEM -->
+<section class="section section-alt" id="ecosystem">
+  <div class="container">
+    <header class="section-head reveal">
+      <p class="section-kicker">Plays well with others</p>
+      <h2>Integrations, sanitizers, migrations.</h2>
+    </header>
+    <div class="eco-grid reveal">
+      <article class="eco-col">
+        <h3>Integrations</h3>
+        <p>
+          Everything the plugin knows about a specific third-party plugin lives in one class —
+          and contributes <strong>exclusively through the same public filters you can use</strong>.
+          Every built-in integration is proof the public API is sufficient. Dormant no-ops when
+          the target plugin is absent.
+        </p>
+        <ul class="pill-list" aria-label="Built-in integrations">
+          <li class="pill">WooCommerce</li>
+          <li class="pill">WooCommerce Stripe</li>
+          <li class="pill">Wordfence</li>
+          <li class="pill">UpdraftPlus</li>
+          <li class="pill">WP Rocket</li>
+        </ul>
+        <p class="eco-note">Cart-cookie cache bypasses, checkout cache skips, Stripe test-mode forcing, webhook pausing, writable-path declarations.</p>
+      </article>
+      <article class="eco-col">
+        <h3>Sanitizers</h3>
+        <p>
+          Opt-in, DB-writing, idempotent — <strong>all disabled by default</strong>. Enable them
+          per-project in the <code>post_deploy</code> hook so the policy is versioned and applied
+          identically to every child environment.
+        </p>
+        <ul class="mini-list">
+          <li><code>anonymize-user-emails</code> → <code>user-{ID}@upsun-preview.invalid</code></li>
+          <li><code>anonymize-user-passwords</code> — one password, or a <code>{ID}</code> template</li>
+          <li><code>deactivate-plugins</code> — your list, previews only</li>
+          <li><code>scrub-options</code> — options or dotted sub-keys, e.g. <code>gateway.live_secret_key</code></li>
+        </ul>
+      </article>
+      <article class="eco-col">
+        <h3>Deploy migrations</h3>
+        <p>
+          Every serious WP-on-Upsun project reinvents this — so it’s in the box. Drop ordered
+          files in a directory, each returning a callable:
+        </p>
+        <div class="code-block code-block-sm" data-copy>
+          <span class="code-lang">migrations/</span>
+          <pre><code>20260701_0001_switch_smtp_plugin.php
+20260708_0001_seed_new_terms.php</code></pre>
+        </div>
+        <p class="eco-note">
+          Run by <code>wp upsun migrate</code> in the deploy hook. Completion markers live in the
+          database, so clones don’t re-run them — and the first failure exits non-zero and aborts
+          the deploy before traffic switches.
+        </p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ INSTALL -->
+<section class="section" id="install">
+  <div class="container">
+    <header class="section-head reveal">
+      <p class="section-kicker">Get started</p>
+      <h2>Three steps. No step four.</h2>
+      <p class="section-sub">
+        For any Composer-managed WordPress. The Packagist release
+        (<code>artetecha/upsun-wp</code>) lands with the in-progress extraction to its own
+        repo; until then the package is consumed as a Composer path repository — the steps
+        don’t change.
+      </p>
+    </header>
+    <ol class="steps reveal">
+      <li class="step">
+        <h3><span class="step-num">1</span> Require the package</h3>
+        <div class="code-block" data-copy>
+          <span class="code-lang">composer.json</span>
+          <pre><code>{
+  <span class="tok-k">"require"</span>: {
+    <span class="tok-s">"artetecha/upsun-wp"</span>: <span class="tok-s">"*"</span>
+  },
+  <span class="tok-k">"extra"</span>: {
+    <span class="tok-k">"installer-paths"</span>: {
+      <span class="tok-s">"wordpress/wp-content/mu-plugins/{$name}"</span>: [<span class="tok-s">"type:wordpress-muplugin"</span>]
+    }
+  }
+}</code></pre>
+        </div>
+      </li>
+      <li class="step">
+        <h3><span class="step-num">2</span> Copy the loader shim</h3>
+        <p>WordPress doesn’t scan mu-plugin subdirectories, so copy the shim to the mu-plugins root at build time:</p>
+        <div class="code-block" data-copy>
+          <span class="code-lang">composer.json → scripts</span>
+          <pre><code><span class="tok-k">"post-install-cmd"</span>: [
+  <span class="tok-s">"cp wordpress/wp-content/mu-plugins/upsun/upsun-loader.php wordpress/wp-content/mu-plugins/upsun-loader.php"</span>
+]</code></pre>
+        </div>
+      </li>
+      <li class="step">
+        <h3><span class="step-num">3</span> Wire the post_deploy hook</h3>
+        <p>One line makes every clone and data re-sync detectable and sanitized. Safe on every environment.</p>
+        <div class="code-block" data-copy>
+          <span class="code-lang">.upsun/config.yaml</span>
+          <pre><code><span class="tok-k">hooks</span>:
+  <span class="tok-k">post_deploy</span>: |
+    <span class="tok-s">wp upsun sanitize --if-needed</span></code></pre>
+        </div>
+      </li>
+    </ol>
+    <p class="install-note reveal">
+      That’s it. On Upsun, eleven modules light up. On your laptop and in CI, the plugin loads
+      and does nothing — <strong>zero special-casing, zero config files to fake</strong>.
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================ STARTER -->
+<section class="section section-alt" id="starter">
+  <div class="container">
+    <div class="starter reveal">
+      <div class="starter-copy">
+        <p class="section-kicker"><span class="soon-tag">coming soon</span> Companion repo</p>
+        <h2>Don’t have a Composer-managed WordPress yet?<br>Start from one.</h2>
+        <p>
+          A starter template repo is in the works: a complete WordPress-on-Upsun project skeleton
+          with everything on this page already wired. Clone it, push it, and you have a running
+          WordPress with previews, caching, health checks, and safe clones from commit one.
+        </p>
+        <ul class="check-list">
+          <li><code>.upsun/config.yaml</code> — app, services, mounts, and hooks preconfigured</li>
+          <li>Env-driven <code>wp-config.php</code> — credentials, URLs, and salts from the platform</li>
+          <li>Composer-managed core and plugins with installer paths set up</li>
+          <li>This mu-plugin preinstalled, loader shim and <code>post_deploy</code> hook already wired</li>
+        </ul>
+      </div>
+      <div class="starter-aside">
+        <div class="terminal terminal-static">
+          <div class="terminal-bar">
+            <span class="tdot tdot-r"></span><span class="tdot tdot-y"></span><span class="tdot tdot-g"></span>
+            <span class="terminal-title">the whole onboarding</span>
+          </div>
+          <div class="terminal-body">
+            <div class="tline"><span class="tok-p">$</span> git clone &lt;starter-template&gt; my-site <span class="tok-dim"># coming soon</span></div>
+            <div class="tline"><span class="tok-p">$</span> cd my-site</div>
+            <div class="tline"><span class="tok-p">$</span> upsun project:create</div>
+            <div class="tline"><span class="tok-p">$</span> upsun push</div>
+            <div class="tline">&nbsp;</div>
+            <div class="tline tok-ok">✔ WordPress deployed — previews, caching, and safe clones included.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ ROADMAP -->
+<section class="section" id="roadmap">
+  <div class="container">
+    <header class="section-head reveal">
+      <p class="section-kicker">Roadmap</p>
+      <h2>Shipped, planned, and honestly blocked.</h2>
+    </header>
+    <div class="roadmap reveal">
+      <div class="roadmap-col">
+        <h3><span class="dot dot-ok"></span> Shipped</h3>
+        <ul class="roadmap-list">
+          <li><strong>0.1</strong> — core modules: environment indicator, page cache, updates policy, Site Health, preview protection, SMTP</li>
+          <li><strong>0.2.0</strong> — the “Upsun” wp-admin dashboard</li>
+          <li><strong>0.2.1</strong> — cron heartbeat + login-screen banner</li>
+          <li><strong>0.2.2</strong> — SafePreviews + <code>wp upsun sanitize</code></li>
+          <li><strong>0.2.4</strong> — <code>wp upsun cache-check</code></li>
+          <li><strong>0.3.0</strong> — integrations architecture</li>
+          <li><strong>0.3.1</strong> — writable-path advisor + <code>wp upsun mounts</code></li>
+          <li><strong>0.3.2</strong> — opt-in DB sanitizers</li>
+          <li><strong>0.3.3</strong> — deploy migrations, <code>wp upsun migrate</code></li>
+          <li><strong>0.3.4</strong> — relationship health (<code>wp upsun relationships --health</code>) + mount-usage module. <strong>v0.3 complete.</strong></li>
+        </ul>
+      </div>
+      <div class="roadmap-col">
+        <h3><span class="dot dot-plan"></span> Planned</h3>
+        <ul class="roadmap-list">
+          <li>Extraction to <code>github.com/artetecha/upsun-wp</code> + Packagist release — in progress; the v0.3 trigger has fired</li>
+          <li><strong>v0.4</strong> — premium plugin vendoring toolkit: <code>wp upsun vendor</code> exports installed premium plugins as Composer-ready packages, and reports their pending updates</li>
+          <li>Elasticsearch / OpenSearch → ElasticPress auto-wiring — deferred until a consumer runs a search service</li>
+          <li>The starter template repo above</li>
+        </ul>
+      </div>
+      <div class="roadmap-col">
+        <h3><span class="dot dot-block"></span> Blocked — and saying so</h3>
+        <ul class="roadmap-list">
+          <li>
+            <strong>Router cache purge.</strong> The Upsun router exposes no purge API, so this
+            plugin doesn’t pretend one exists. The plan: a documented no-op API surface
+            (<code>Upsun\purge_paths()</code>) with pluggable backends for Fastly/Cloudflare-in-front
+            setups — lighting up natively if the platform ever ships purging.
+          </li>
+          <li><strong>Multisite</strong> — delegated to <code>upsun/wp-ms-dbu</code> until there’s demand.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ FOOTER -->
+<footer class="site-footer">
+  <div class="container footer-grid">
+    <div>
+      <p class="brand"><span class="brand-mark" aria-hidden="true">&gt;_</span> <span class="brand-name">artetecha/upsun-wp</span></p>
+      <p class="footer-tag">Platform-native WordPress on Upsun. MIT licensed.</p>
+    </div>
+    <ul class="footer-links">
+      <li><a href="https://github.com/artetecha/upsun-wp">GitHub</a></li>
+      <li><a href="#approach">The approach</a></li>
+      <li><a href="#modules">Modules</a></li>
+      <li><a href="#cli">CLI</a></li>
+      <li><a href="#install">Install</a></li>
+      <li><a href="#roadmap">Roadmap</a></li>
+    </ul>
+  </div>
+  <div class="container">
+    <p class="disclaimer">
+      An independent open-source project. Not affiliated with, sponsored, or endorsed by
+      Upsun or Platform.sh. “Upsun” is a trademark of its respective owner and is used here
+      only to identify the platform this software integrates with. WordPress is a registered
+      trademark of the WordPress Foundation.
+    </p>
+  </div>
+</footer>
+
+</main>
+
+<script src="main.js"></script>
+</body>
+</html>
