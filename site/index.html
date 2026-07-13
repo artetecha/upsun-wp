@@ -61,7 +61,7 @@
         Off-platform it <strong>fully no-ops</strong> — local dev and CI need no special-casing.
       </p>
       <ul class="badge-row" aria-label="Project facts">
-        <li class="badge badge-version">v0.3.4</li>
+        <li class="badge badge-version">v0.3.5</li>
         <li class="badge">MIT</li>
         <li class="badge">PHP 8.1+</li>
         <li class="badge">WordPress 6.0+</li>
@@ -433,10 +433,9 @@
       <p class="section-kicker">Get started</p>
       <h2>Three steps. No step four.</h2>
       <p class="section-sub">
-        For any Composer-managed WordPress. The Packagist release
-        (<code>artetecha/upsun-wp</code>) lands with the in-progress extraction to its own
-        repo; until then the package is consumed as a Composer path repository — the steps
-        don’t change.
+        For any Composer-managed WordPress, straight from
+        <a href="https://packagist.org/packages/artetecha/upsun-wp">Packagist</a>
+        (<code>artetecha/upsun-wp</code>).
       </p>
     </header>
     <ol class="steps reveal">
@@ -446,25 +445,29 @@
           <span class="code-lang">composer.json</span>
           <pre><code>{
   <span class="tok-k">"require"</span>: {
-    <span class="tok-s">"artetecha/upsun-wp"</span>: <span class="tok-s">"*"</span>
+    <span class="tok-s">"artetecha/upsun-wp"</span>: <span class="tok-s">"^0.3"</span>
   },
   <span class="tok-k">"extra"</span>: {
     <span class="tok-k">"installer-paths"</span>: {
-      <span class="tok-s">"wordpress/wp-content/mu-plugins/{$name}"</span>: [<span class="tok-s">"type:wordpress-muplugin"</span>]
+      <span class="tok-s">"composer-mu-plugins/{$name}"</span>: [<span class="tok-s">"artetecha/upsun-wp"</span>]
     }
   }
 }</code></pre>
         </div>
       </li>
       <li class="step">
-        <h3><span class="step-num">2</span> Copy the loader shim</h3>
-        <p>WordPress doesn’t scan mu-plugin subdirectories, so copy the shim to the mu-plugins root at build time:</p>
+        <h3><span class="step-num">2</span> Copy it into the build</h3>
+        <p>The package stages outside <code>wordpress/</code> because the core extraction owns that tree (and Composer installs <code>artetecha/*</code> first); copy it in — with the loader shim WordPress needs at the mu-plugins root — at build time:</p>
         <div class="code-block" data-copy>
           <span class="code-lang">composer.json → scripts</span>
           <pre><code><span class="tok-k">"post-install-cmd"</span>: [
-  <span class="tok-s">"cp wordpress/wp-content/mu-plugins/upsun/upsun-loader.php wordpress/wp-content/mu-plugins/upsun-loader.php"</span>
+  <span class="tok-s">"mkdir -p wordpress/wp-content/mu-plugins"</span>,
+  <span class="tok-s">"rm -rf wordpress/wp-content/mu-plugins/upsun"</span>,
+  <span class="tok-s">"cp -R composer-mu-plugins/upsun wordpress/wp-content/mu-plugins/upsun"</span>,
+  <span class="tok-s">"cp composer-mu-plugins/upsun/upsun-loader.php wordpress/wp-content/mu-plugins/upsun-loader.php"</span>
 ]</code></pre>
         </div>
+        <p class="step-note">Content directory outside the core install dir (Bedrock-style)? The plain <code>type:wordpress-muplugin</code> route works as-is — see the <a href="https://github.com/artetecha/upsun-wp#installation-composer-managed-wordpress">README</a>.</p>
       </li>
       <li class="step">
         <h3><span class="step-num">3</span> Wire the post_deploy hook</h3>
@@ -489,12 +492,13 @@
   <div class="container">
     <div class="starter reveal">
       <div class="starter-copy">
-        <p class="section-kicker"><span class="soon-tag">coming soon</span> Companion repo</p>
+        <p class="section-kicker">Companion repo</p>
         <h2>Don’t have a Composer-managed WordPress yet?<br>Start from one.</h2>
         <p>
-          A starter template repo is in the works: a complete WordPress-on-Upsun project skeleton
-          with everything on this page already wired. Clone it, push it, and you have a running
-          WordPress with previews, caching, health checks, and safe clones from commit one.
+          <a href="https://github.com/artetecha/wordpress-upsun-starter"><strong>wordpress-upsun-starter</strong></a>
+          is a complete WordPress-on-Upsun project skeleton with everything on this page already
+          wired. Create a project from it, push, and you have a running WordPress with previews,
+          caching, health checks, and safe clones from commit one.
         </p>
         <ul class="check-list">
           <li><code>.upsun/config.yaml</code> — app, services, mounts, and hooks preconfigured</li>
@@ -502,6 +506,7 @@
           <li>Composer-managed core and plugins with installer paths set up</li>
           <li>This mu-plugin preinstalled, loader shim and <code>post_deploy</code> hook already wired</li>
         </ul>
+        <p><a class="btn btn-ghost" href="https://github.com/artetecha/wordpress-upsun-starter">Use the template on GitHub</a></p>
       </div>
       <div class="starter-aside">
         <div class="terminal terminal-static">
@@ -510,7 +515,7 @@
             <span class="terminal-title">the whole onboarding</span>
           </div>
           <div class="terminal-body">
-            <div class="tline"><span class="tok-p">$</span> git clone &lt;starter-template&gt; my-site <span class="tok-dim"># coming soon</span></div>
+            <div class="tline"><span class="tok-p">$</span> composer create-project artetecha/wordpress-upsun-starter my-site</div>
             <div class="tline"><span class="tok-p">$</span> cd my-site</div>
             <div class="tline"><span class="tok-p">$</span> upsun project:create</div>
             <div class="tline"><span class="tok-p">$</span> upsun push</div>
@@ -544,15 +549,14 @@
           <li><strong>0.3.2</strong> — opt-in DB sanitizers</li>
           <li><strong>0.3.3</strong> — deploy migrations, <code>wp upsun migrate</code></li>
           <li><strong>0.3.4</strong> — relationship health (<code>wp upsun relationships --health</code>) + mount-usage module. <strong>v0.3 complete.</strong></li>
+          <li><strong>0.3.5</strong> — extraction complete: this repo + <a href="https://packagist.org/packages/artetecha/upsun-wp">Packagist</a>, the <a href="https://github.com/artetecha/wordpress-upsun-starter">starter template</a> live, and a first-deploy fix caught by it</li>
         </ul>
       </div>
       <div class="roadmap-col">
         <h3><span class="dot dot-plan"></span> Planned</h3>
         <ul class="roadmap-list">
-          <li>Extraction to <code>github.com/artetecha/upsun-wp</code> + Packagist release — in progress; the v0.3 trigger has fired</li>
           <li><strong>v0.4</strong> — premium plugin vendoring toolkit: <code>wp upsun vendor</code> exports installed premium plugins as Composer-ready packages, and reports their pending updates</li>
           <li>Elasticsearch / OpenSearch → ElasticPress auto-wiring — deferred until a consumer runs a search service</li>
-          <li>The starter template repo above</li>
         </ul>
       </div>
       <div class="roadmap-col">

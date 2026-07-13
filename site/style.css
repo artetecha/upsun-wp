@@ -518,6 +518,7 @@ body::before {
   border: 1px solid var(--accent-line);
 }
 .step p { font-size: 0.88rem; color: var(--text-mute); }
+.step .step-note { margin-top: 12px; font-size: 0.82rem; color: var(--text-dim); }
 .step .code-block { margin-top: auto; margin-bottom: 0; }
 .step .code-block pre code { font-size: 0.72rem; }
 .install-note {
