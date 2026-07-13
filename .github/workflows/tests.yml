@@ -73,7 +73,7 @@ jobs:
               { "type": "path", "url": "../plugin", "options": { "symlink": false } }
             ],
             "require": {
-              "artetecha/upsun-wp": "*",
+              "artetecha/upsun-wp": "@dev",
               "johnpbloch/wordpress-core": "^7.0",
               "johnpbloch/wordpress-core-installer": "^2.0",
               "composer/installers": "^2.0"
