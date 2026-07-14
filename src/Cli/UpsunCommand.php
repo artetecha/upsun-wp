@@ -5,6 +5,7 @@ namespace Upsun\Cli;
 use Upsun\CacheCheck;
 use Upsun\Environment;
 use Upsun\Migrations;
+use Upsun\Modules\Cloudflare;
 use Upsun\Modules\SafePreviews;
 use Upsun\Modules\SiteHealth;
 use Upsun\Modules\WritablePaths;
@@ -611,5 +612,103 @@ class UpsunCommand {
 		}
 
 		WP_CLI::success( 'Object cache flushed. Note: the Upsun router cache has no purge API; cached pages expire by TTL or on redeploy.' );
+	}
+
+	/**
+	 * Cloudflare edge operations.
+	 *
+	 * Reports whether Cloudflare is fronting this environment and whether
+	 * purge credentials are configured, or purges the Cloudflare edge cache
+	 * (the invalidation the Upsun router cache never had). Credentials come
+	 * from CLOUDFLARE_ZONE_ID and CLOUDFLARE_API_TOKEN (use a token scoped
+	 * to Zone -> Cache Purge only).
+	 *
+	 * ## OPTIONS
+	 *
+	 * <action>
+	 * : The action to perform.
+	 * ---
+	 * options:
+	 *   - status
+	 *   - purge
+	 * ---
+	 *
+	 * [--url=<url>]
+	 * : With "purge", purge only these URLs. Repeat for several, or pass a
+	 * comma-separated list. Omit to purge everything in the zone.
+	 *
+	 * [--all]
+	 * : With "purge", purge the entire zone (the default when no --url is
+	 * given; accepted explicitly for clarity in scripts).
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp upsun cloudflare status
+	 *     wp upsun cloudflare purge --all
+	 *     wp upsun cloudflare purge --url=https://example.com/ --url=https://example.com/courses/
+	 */
+	public function cloudflare( $args, $assoc_args ) {
+		$action      = $args[0] ?? '';
+		$credentials = Cloudflare::credentials();
+		$purge_ready = '' !== $credentials['zone'] && '' !== $credentials['token'];
+
+		if ( 'status' === $action ) {
+			$fronted = Cloudflare::is_fronted( $_SERVER, Cloudflare::trusted_ranges() );
+
+			\WP_CLI\Utils\format_items(
+				$assoc_args['format'] ?? 'table',
+				array(
+					array(
+						'field' => 'fronting_this_request',
+						'value' => $fronted ? 'yes' : 'no',
+					),
+					array(
+						'field' => 'client_ip',
+						'value' => (string) ( $_SERVER['REMOTE_ADDR'] ?? '' ),
+					),
+					array(
+						'field' => 'trusted_ranges',
+						'value' => (string) count( Cloudflare::trusted_ranges() ),
+					),
+					array(
+						'field' => 'purge_credentials',
+						'value' => $purge_ready ? 'configured' : 'not set',
+					),
+				),
+				array( 'field', 'value' )
+			);
+
+			return;
+		}
+
+		if ( 'purge' !== $action ) {
+			WP_CLI::error( "Unknown action '{$action}'. Supported: status, purge." );
+		}
+
+		$urls = array();
+
+		if ( isset( $assoc_args['url'] ) ) {
+			foreach ( (array) $assoc_args['url'] as $value ) {
+				foreach ( explode( ',', (string) $value ) as $url ) {
+					$url = trim( $url );
+
+					if ( '' !== $url ) {
+						$urls[] = $url;
+					}
+				}
+			}
+		}
+
+		$result = ( new Cloudflare() )->purge( $urls );
+
+		if ( is_wp_error( $result ) ) {
+			WP_CLI::error( $result->get_error_message() );
+		}
+
+		WP_CLI::success(
+			array() === $urls
+				? 'Purged the entire Cloudflare zone.'
+				: sprintf( 'Purged %d URL(s) from Cloudflare.', count( $urls ) )
+		);
 	}
 }

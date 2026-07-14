@@ -5,6 +5,9 @@ namespace Upsun;
 final class ModuleRegistry {
 
 	private const MODULES = array(
+		// First: restores the real client IP into REMOTE_ADDR (in register())
+		// before any other module's hooks read it.
+		'cloudflare'            => Modules\Cloudflare::class,
 		'environment-indicator' => Modules\EnvironmentIndicator::class,
 		'page-cache'            => Modules\PageCache::class,
 		'updates-policy'        => Modules\UpdatesPolicy::class,

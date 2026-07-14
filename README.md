@@ -100,6 +100,7 @@ Skipping this step does **not** weaken the runtime preview protections (mail int
 
 | Module | What it does |
 |---|---|
+| `cloudflare` | For sites proxied by Cloudflare in front of the Upsun router: restores the real visitor IP into `REMOTE_ADDR` from `CF-Connecting-IP` — but only when the connecting peer is itself within a published Cloudflare range, so a header forged straight at the `*.upsun.app` origin is ignored. Normalises the request scheme from `CF-Visitor`. Optional shared-secret origin guard (off by default) rejects production requests that bypassed Cloudflare. Adds `wp upsun cloudflare purge` — the edge invalidation the Upsun router cache never had — with optional auto-purge of a post's URL on change, a Cloudflare health check, and a dashboard panel. Inert on environments Cloudflare does not front (previews, direct origin hits), so it is safe to leave enabled everywhere. |
 | `environment-indicator` | Color-coded admin-bar badge (branch · environment type) with an Upsun Console link, a dashboard widget with environment metadata, and a matching banner on the login screen. |
 | `page-cache` | Emits `Cache-Control: public, max-age=0, s-maxage={ttl}` on anonymous, session-free page views so the Upsun router can cache them; optionally strips configured Set-Cookie headers (e.g. LMS guest sessions) to keep responses cacheable. Built-in bypass patterns cover core session cookies; commerce patterns come from the Integrations layer. `wp upsun cache-check <url>` (also a form in the dashboard Caching panel) explains any page's verdict: effective TTL, Set-Cookie spoilers, bypass-pattern matches, the route cookie allowlist (declared via `upsun_cache_check_route_cache` — Upsun does not expose it at runtime), and whether the fetch was a router HIT/MISS/BYPASS. |
 | `updates-policy` | Disables the in-app auto-update machinery (the filesystem is read-only; Composer is the update path), replaces the auto-update toggles with a note, and removes the core Site Health tests that would fail by design. |
@@ -143,7 +144,7 @@ integrations do.
 ### Constants (wp-config friendly)
 
 - `UPSUN_MU_DISABLE` — kill switch for the whole plugin.
-- `UPSUN_DISABLE_ENVIRONMENT_INDICATOR`, `UPSUN_DISABLE_PAGE_CACHE`, `UPSUN_DISABLE_UPDATES_POLICY`, `UPSUN_DISABLE_SITE_HEALTH`, `UPSUN_DISABLE_PREVIEW_PROTECTION`, `UPSUN_DISABLE_SMTP`, `UPSUN_DISABLE_DASHBOARD`, `UPSUN_DISABLE_CRON_HEARTBEAT`, `UPSUN_DISABLE_SAFE_PREVIEWS`, `UPSUN_DISABLE_WRITABLE_PATHS`, `UPSUN_DISABLE_MOUNT_USAGE` — per-module switches.
+- `UPSUN_DISABLE_CLOUDFLARE`, `UPSUN_DISABLE_ENVIRONMENT_INDICATOR`, `UPSUN_DISABLE_PAGE_CACHE`, `UPSUN_DISABLE_UPDATES_POLICY`, `UPSUN_DISABLE_SITE_HEALTH`, `UPSUN_DISABLE_PREVIEW_PROTECTION`, `UPSUN_DISABLE_SMTP`, `UPSUN_DISABLE_DASHBOARD`, `UPSUN_DISABLE_CRON_HEARTBEAT`, `UPSUN_DISABLE_SAFE_PREVIEWS`, `UPSUN_DISABLE_WRITABLE_PATHS`, `UPSUN_DISABLE_MOUNT_USAGE` — per-module switches.
 - `UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE`, `UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE_STRIPE` — per-integration switches.
 - `UPSUN_MIGRATIONS_DIR` — directory of deploy migrations (see below); unset = feature idle.
 - `UPSUN_MU_FORCE` — boot modules and integrations off-platform (testing against faked `PLATFORM_*` variables).
@@ -157,6 +158,14 @@ Module boot is deferred to `muplugins_loaded` priority 0, so **any mu-plugin** c
 | `upsun_mu_modules` | `array<string, class-string>` | all modules | Add/remove/replace modules. |
 | `upsun_integrations` | `array<string, class-string>` | all integrations | Add/remove/replace third-party plugin integrations. |
 | `upsun_page_cache_ttl` | `int` | `600` | Shared-cache TTL in seconds; `<= 0` disables the header. |
+| `upsun_cloudflare_enabled` | `bool` | `true` | Load the Cloudflare module (the IP restoration self-gates on the CF ranges, so it is safe to leave on everywhere). |
+| `upsun_cloudflare_ip_ranges` | `string[]` | bundled CF v4+v6 CIDRs | The Cloudflare ranges trusted for header restoration. Override to refresh the bundled list (e.g. from a cron-updated option) without a plugin release. |
+| `upsun_cloudflare_origin_secret` | `string` | `''` (from `CLOUDFLARE_ORIGIN_SECRET`) | Shared secret a CF Transform Rule injects on proxied requests. When set, production requests missing/mismatching it get a 403 (bypass guard). Empty = guard disabled. Read from an env var; never hard-code. |
+| `upsun_cloudflare_origin_secret_header` | `string` | `'HTTP_X_ORIGIN_SECRET'` | The `$_SERVER` key carrying the origin secret (i.e. `X-Origin-Secret`). |
+| `upsun_cloudflare_zone_id` | `string` | `''` (from `CLOUDFLARE_ZONE_ID`) | Cloudflare zone id for purge calls. |
+| `upsun_cloudflare_api_token` | `string` | `''` (from `CLOUDFLARE_API_TOKEN`) | Cloudflare API token for purge calls — scope it to Zone → Cache Purge only. |
+| `upsun_cloudflare_auto_purge` | `bool` | `false` | Purge a post's URL(s) from the Cloudflare edge when its cache is cleaned. |
+| `upsun_cloudflare_post_purge_urls` | `string[]` | `[ permalink ]` | The URLs purged for a changed post when auto-purge is on. |
 | `upsun_page_cache_bypass_cookie_patterns` | `string[]` | WP/Woo/session regexes | Cookie names that mark a request personalised. |
 | `upsun_page_cache_strip_cookies` | `string[]` | `[]` | Cookie-name prefixes whose Set-Cookie headers are stripped from anonymous responses. |
 | `upsun_page_cache_skip` | `bool` | `false` | Skip cache headers for the current request (plugin-specific dynamic pages). |
@@ -231,6 +240,9 @@ wp upsun doctor          # health checks; exits 1 on failure (deploy-hook friend
 wp upsun relationships   # service relationships (credentials never printed)
 wp upsun relationships --health   # live probes: MySQL ping, Redis INFO, HTTP/cluster status
 wp upsun cache flush     # object cache only — the router cache has no purge API
+wp upsun cloudflare status               # is Cloudflare fronting this env? purge creds set?
+wp upsun cloudflare purge --all          # purge the whole Cloudflare zone
+wp upsun cloudflare purge --url=https://example.com/   # ...or specific URLs (repeatable)
 wp upsun cache-check /some/page          # why is/isn't this page router-cacheable?
 wp upsun cache-check / --cookie="a=1"    # ...and what do these request cookies change?
 wp upsun cache-check / --auth=user:pass  # for previews behind HTTP access control
@@ -245,7 +257,7 @@ wp upsun sanitize --enable="anonymize-user-emails,anonymize-user-passwords:passw
                          # when placed in the post_deploy hook); filters still work
 ```
 
-All commands print "Not running on Upsun." and exit 0 off-platform.
+All commands except `wp upsun cloudflare` print "Not running on Upsun." and exit 0 off-platform. `cloudflare` is host-agnostic (it talks to the Cloudflare API using `CLOUDFLARE_*` credentials), so it also runs from CI or a local shell.
 
 ## Development
 
