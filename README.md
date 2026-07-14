@@ -1,6 +1,6 @@
 # upsun-wp — the Upsun mu-plugin for WordPress
 
-Platform integration for WordPress running on [Upsun](https://upsun.com): environment awareness, router-cache friendliness, safe preview clones, deploy migrations, Upsun-specific Site Health checks, and a `wp upsun` CLI command.
+Platform integration for WordPress running on [Upsun](https://upsun.com): environment awareness, router-cache friendliness, safe preview clones, deploy migrations, Cloudflare front-end support, Upsun-specific Site Health checks, and a `wp upsun` CLI command.
 
 **Site & docs: [upsun.artetecha.com](https://upsun.artetecha.com/)**
 
@@ -270,10 +270,13 @@ PHP floor is **8.1** (enforced in CI); tests are standalone with minimal WordPre
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for the versioned plan — headline items: an
-"Upsun" dashboard page in wp-admin (environment/services/health panels +
-operational actions, extensible via `upsun_dashboard_panels`), a SafePreviews
-module (neuter live payment/webhook/mail integrations on preview clones),
-`wp upsun cache-check` (explain why a page is/isn't router-cacheable), cron
-execution heartbeat, a read-only-FS plugin compatibility layer, and
-`wp upsun migrate`. Router cache purge remains blocked on a platform purge API.
+See [ROADMAP.md](ROADMAP.md) for the versioned plan. The v0.2 and v0.3
+milestones shipped (the "Upsun" wp-admin dashboard, SafePreviews, integrations
+architecture, `wp upsun cache-check`/`migrate`/`mounts`/`relationships --health`,
+opt-in sanitizers, writable-path and mount-usage advisors), and the plugin was
+extracted to this repository and published on Packagist. Latest: the
+`cloudflare` module (0.4.0) — real client-IP restoration, edge cache purge, and
+an optional origin guard for sites proxied by Cloudflare in front of the Upsun
+router. Next up in v0.4: the premium plugin vendoring toolkit (`wp upsun vendor`).
+Router cache purge remains blocked on a platform purge API — though the
+`cloudflare` module now purges the *edge* cache when Cloudflare fronts the site.

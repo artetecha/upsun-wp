@@ -1,6 +1,6 @@
 # Roadmap
 
-## Status (2026-07-13)
+## Status (2026-07-14)
 
 | Milestone | Item | Status |
 |---|---|---|
@@ -15,17 +15,19 @@
 | v0.3 | Deploy migrations (`wp upsun migrate`) | ✅ shipped in 0.3.3 (PR #52), verified by two live preview deploys, KEDS runs on it |
 | v0.3 | Relationship health (`wp upsun relationships --health`) | ✅ shipped in 0.3.4 (PR #54) |
 | v0.3 | Mount usage visibility (`mount-usage` module) | ✅ shipped in 0.3.4 (PR #54) |
-| v0.4 | Cloudflare front-end support (`cloudflare` module) | 🔄 implemented in 0.4.0, pending review + live verification |
-| v0.4 | Premium plugin vendoring toolkit (`wp upsun vendor`) | ⬜ planned |
-| — | Extraction to an independent repo | 🔄 in progress — v0.3 shipped, the trigger has fired |
+| v0.4 | Cloudflare front-end support (`cloudflare` module) | ✅ shipped in 0.4.0 (PR #1) — pending live verification |
+| v0.4 | Premium plugin vendoring toolkit (`wp upsun vendor`) | ⬜ planned — the original 0.4.0 target, now a later 0.4.x (the cloudflare module took 0.4.0) |
+| — | Extraction to an independent repo | ✅ done — this repo, on Packagist as `artetecha/upsun-wp` |
 
-**v0.3 is complete.** Per the extraction section below, the plugin moves to
-its own repository (`github.com/artetecha/upsun-wp`, published on Packagist
-as `artetecha/upsun-wp`, site at `upsun.artetecha.com`); KEDS becomes a
-normal Composer consumer.
+**v0.3 is complete, and the extraction is done:** the plugin lives in its own
+repository (`github.com/artetecha/upsun-wp`, published on Packagist as
+`artetecha/upsun-wp`, site at `upsun.artetecha.com`) and KEDS consumes it as a
+normal Composer package. **v0.4 opened with the `cloudflare` module (0.4.0)**
+rather than the originally planned vendoring toolkit, which slips to a later
+0.4.x.
 
-The v0.2 milestone spans 0.2.x releases; version = package `composer.json` /
-`UPSUN_MU_PLUGIN_VERSION`.
+Each milestone spans point releases (e.g. 0.2.x, 0.3.x, 0.4.x); version =
+package `composer.json` / `UPSUN_MU_PLUGIN_VERSION`.
 
 ---
 

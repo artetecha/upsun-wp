@@ -62,7 +62,7 @@
         Off-platform it <strong>fully no-ops</strong> — local dev and CI need no special-casing.
       </p>
       <ul class="badge-row" aria-label="Project facts">
-        <li class="badge badge-version">v0.3.5</li>
+        <li class="badge badge-version">v0.4.0</li>
         <li class="badge">MIT</li>
         <li class="badge">PHP 8.1+</li>
         <li class="badge">WordPress 6.0+</li>
@@ -177,7 +177,7 @@
       </article>
       <article class="principle">
         <h3><span class="principle-num">05</span> Every module unit-tested</h3>
-        <p>PHPUnit against WP stubs — no WordPress install required. Thirteen test suites, one per module or subsystem, on a PHP 8.1→8.4 CI matrix.</p>
+        <p>PHPUnit against WP stubs — no WordPress install required. Fourteen test suites, one per module or subsystem, on a PHP 8.1→8.4 CI matrix.</p>
       </article>
     </div>
   </div>
@@ -237,7 +237,7 @@
 <section class="section section-alt" id="modules">
   <div class="container">
     <header class="section-head reveal">
-      <p class="section-kicker">Eleven modules</p>
+      <p class="section-kicker">Twelve modules</p>
       <h2>Everything WordPress needs to know about its platform.</h2>
       <p class="section-sub">
         Each module is independently switchable — a <code>UPSUN_DISABLE_*</code> constant in
@@ -260,6 +260,11 @@
         <p class="card-kicker">page-cache</p>
         <h3>Router-cache friendliness</h3>
         <p>Emits <code>Cache-Control: public, s-maxage={ttl}</code> on anonymous, session-free views so the router can cache them; optionally strips cookie spoilers. Commerce bypass patterns come from the integrations layer.</p>
+      </article>
+      <article class="card">
+        <p class="card-kicker">cloudflare</p>
+        <h3>Real visitor IPs behind the proxy</h3>
+        <p>When Cloudflare fronts the router, restores the real client IP from <code>CF-Connecting-IP</code> — trusted only from published Cloudflare ranges, so a header forged at the origin is ignored. Plus edge cache purge (<code>wp upsun cloudflare purge</code>) and an optional origin guard. Inert where Cloudflare isn’t in front.</p>
       </article>
       <article class="card">
         <p class="card-kicker">safe-previews</p>
@@ -483,7 +488,7 @@
       </li>
     </ol>
     <p class="install-note reveal">
-      That’s it. On Upsun, eleven modules light up. On your laptop and in CI, the plugin loads
+      That’s it. On Upsun, twelve modules light up. On your laptop and in CI, the plugin loads
       and does nothing — <strong>zero special-casing, zero config files to fake</strong>.
     </p>
   </div>
@@ -552,12 +557,13 @@
           <li><strong>0.3.3</strong> — deploy migrations, <code>wp upsun migrate</code></li>
           <li><strong>0.3.4</strong> — relationship health (<code>wp upsun relationships --health</code>) + mount-usage module. <strong>v0.3 complete.</strong></li>
           <li><strong>0.3.5</strong> — extraction complete: this repo + <a href="https://packagist.org/packages/artetecha/upsun-wp">Packagist</a>, the <a href="https://github.com/artetecha/wordpress-upsun-starter">starter template</a> live, and a first-deploy fix caught by it</li>
+          <li><strong>0.4.0</strong> — <code>cloudflare</code> module: real client-IP restoration behind the proxy, edge cache purge (<code>wp upsun cloudflare purge</code>), and an optional origin guard</li>
         </ul>
       </div>
       <div class="roadmap-col">
         <h3><span class="dot dot-plan"></span> Planned</h3>
         <ul class="roadmap-list">
-          <li><strong>v0.4</strong> — premium plugin vendoring toolkit: <code>wp upsun vendor</code> exports installed premium plugins as Composer-ready packages, and reports their pending updates</li>
+          <li><strong>v0.4.x</strong> — premium plugin vendoring toolkit: <code>wp upsun vendor</code> exports installed premium plugins as Composer-ready packages, and reports their pending updates (the original 0.4.0 target, now that the <code>cloudflare</code> module shipped first)</li>
           <li>Elasticsearch / OpenSearch → ElasticPress auto-wiring — deferred until a consumer runs a search service</li>
         </ul>
       </div>
@@ -566,9 +572,10 @@
         <ul class="roadmap-list">
           <li>
             <strong>Router cache purge.</strong> The Upsun router exposes no purge API, so this
-            plugin doesn’t pretend one exists. The plan: a documented no-op API surface
-            (<code>Upsun\purge_paths()</code>) with pluggable backends for Fastly/Cloudflare-in-front
-            setups — lighting up natively if the platform ever ships purging.
+            plugin doesn’t pretend one exists. Partially unblocked in 0.4.0: when Cloudflare
+            fronts the site, the <code>cloudflare</code> module purges the <em>edge</em> cache.
+            The tidy next step is a generic <code>Upsun\purge_paths()</code> facade over pluggable
+            backends (Cloudflare/Fastly/the router if it ever ships purging).
           </li>
           <li><strong>Multisite</strong> — delegated to <code>upsun/wp-ms-dbu</code> until there’s demand.</li>
         </ul>
