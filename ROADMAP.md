@@ -15,6 +15,7 @@
 | v0.3 | Deploy migrations (`wp upsun migrate`) | ✅ shipped in 0.3.3 (PR #52), verified by two live preview deploys, KEDS runs on it |
 | v0.3 | Relationship health (`wp upsun relationships --health`) | ✅ shipped in 0.3.4 (PR #54) |
 | v0.3 | Mount usage visibility (`mount-usage` module) | ✅ shipped in 0.3.4 (PR #54) |
+| v0.4 | Cloudflare front-end support (`cloudflare` module) | 🔄 implemented in 0.4.0, pending review + live verification |
 | v0.4 | Premium plugin vendoring toolkit (`wp upsun vendor`) | ⬜ planned |
 | — | Extraction to an independent repo | 🔄 in progress — v0.3 shipped, the trigger has fired |
 
@@ -315,6 +316,32 @@ rather than adding to it.
 
 ## v0.4+ / blocked on platform or demand
 
+### Cloudflare front-end support (`cloudflare` module) — implemented in 0.4.0
+
+For sites that put Cloudflare in front of the Upsun router. Cloudflare then
+terminates the client connection, so the router — and PHP's `REMOTE_ADDR` —
+sees a Cloudflare edge address on every request. Anything keyed on the client
+IP (comment/order IPs, IP-based sessions such as an LMS guest session, rate
+limiters, fraud signals) is broken until the real IP is restored.
+
+- **Client IP restoration** (the load-bearing piece): rewrite `REMOTE_ADDR`
+  from `CF-Connecting-IP`, but *only* when the connecting peer is itself in a
+  published Cloudflare range. The origin's `*.upsun.app` URL stays publicly
+  reachable, so a header forged directly at the origin must be ignored — the
+  CIDR check on the peer is what makes the header trustworthy. Runs
+  synchronously at `muplugins_loaded` priority 0 (module registered first) so
+  `REMOTE_ADDR` is correct before `init`. Scheme normalised from `CF-Visitor`.
+- **Bundled CF ranges** (v4+v6) so there is no runtime external request;
+  `upsun_cloudflare_ip_ranges` refreshes them without a release.
+- **Origin bypass guard** (off by default): a shared secret injected by a
+  Cloudflare Transform Rule, checked on production, rejecting requests that
+  skipped Cloudflare. Inert until a secret is set.
+- **Edge cache purge** — `wp upsun cloudflare purge [--all|--url=]`, a
+  `purge()` helper, and optional auto-purge on post change. This is the
+  invalidation the router cache never had (see below).
+- Cloudflare health check + dashboard panel; the module is inert on
+  environments Cloudflare does not front (previews, direct origin hits).
+
 ### Premium plugin vendoring toolkit (`wp upsun vendor`)
 
 Read-only filesystems plus `DISALLOW_FILE_MODS` mean premium plugins cannot
@@ -341,10 +368,12 @@ daily premium-update PRs). Three layers, two homes:
 
 ### Other
 
-- **Router cache purge** — blocked: the Upsun router exposes no purge API.
-  Pre-ship the API surface as documented no-ops (`Upsun\purge_paths()`,
-  `Upsun\purge_keys()`) with a pluggable backend so Fastly/Cloudflare-in-front
-  setups can adapter in, and the feature lights up if the platform ships purging.
+- **Router cache purge** — still blocked at the router: Upsun exposes no purge
+  API, so router-cached pages expire only by TTL or redeploy. Partially
+  unblocked by the `cloudflare` module (0.4.0): when Cloudflare fronts the
+  site, `wp upsun cloudflare purge` invalidates the *edge* cache immediately.
+  A generic `Upsun\purge_paths()` facade over pluggable backends
+  (Cloudflare/Fastly/router-if-it-ever-ships) remains the tidy next step.
 - **Multisite** — keep delegating to `upsun/wp-ms-dbu` until there's demand to
   absorb it.
 - **Maintenance mode** — parity feature with pantheon-mu-plugin; low urgency.
