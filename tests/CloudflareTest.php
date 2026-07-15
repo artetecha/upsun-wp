@@ -13,6 +13,7 @@ final class CloudflareTest extends TestCase {
 			'REMOTE_ADDR',
 			'UPSUN_ORIGINAL_REMOTE_ADDR',
 			'HTTP_CF_CONNECTING_IP',
+			'HTTP_CF_RAY',
 			'HTTP_CF_VISITOR',
 			'HTTP_X_FORWARDED_PROTO',
 			'HTTP_X_ORIGIN_SECRET',
@@ -128,21 +129,20 @@ final class CloudflareTest extends TestCase {
 
 	/* ---- Fronting detection ------------------------------------------ */
 
-	public function test_is_fronted(): void {
-		$this->assertTrue( Cloudflare::is_fronted( array( 'REMOTE_ADDR' => '104.16.0.1' ), $this->ranges() ) );
-		$this->assertFalse( Cloudflare::is_fronted( array( 'REMOTE_ADDR' => '203.0.113.7' ), $this->ranges() ) );
-		$this->assertFalse( Cloudflare::is_fronted( array(), $this->ranges() ) );
+	public function test_is_fronted_detects_cloudflare_headers(): void {
+		// The reliable signal on Upsun is CF's own headers — not an IP range,
+		// because the router resolves the client IP and CF's edge never reaches
+		// the app.
+		$this->assertTrue( Cloudflare::is_fronted( array( 'HTTP_CF_RAY' => 'a1b2c3-MXP' ) ) );
+		$this->assertTrue( Cloudflare::is_fronted( array( 'HTTP_CF_CONNECTING_IP' => '203.0.113.7' ) ) );
+		$this->assertFalse( Cloudflare::is_fronted( array() ) );
 	}
 
-	public function test_is_fronted_uses_original_peer_after_restoration(): void {
-		// Post-restoration: REMOTE_ADDR is the real visitor, but the original
-		// Cloudflare peer is preserved and must still read as fronted.
-		$server = array(
-			'REMOTE_ADDR'                => '203.0.113.7', // restored real visitor
-			'UPSUN_ORIGINAL_REMOTE_ADDR' => '104.16.0.1',  // the Cloudflare edge
-		);
-
-		$this->assertTrue( Cloudflare::is_fronted( $server, $this->ranges() ) );
+	public function test_is_fronted_ignores_remote_addr(): void {
+		// A Cloudflare-range REMOTE_ADDR with no CF headers is NOT fronting
+		// (this is the old, wrong heuristic — and on Upsun REMOTE_ADDR is the
+		// real client anyway).
+		$this->assertFalse( Cloudflare::is_fronted( array( 'REMOTE_ADDR' => '104.16.0.1' ) ) );
 	}
 
 	/* ---- Origin secret guard ----------------------------------------- */
@@ -187,20 +187,34 @@ final class CloudflareTest extends TestCase {
 		putenv( 'PLATFORM_ENVIRONMENT_TYPE=production' );
 		\Upsun\Environment::reset();
 
-		$_SERVER['REMOTE_ADDR'] = '203.0.113.7'; // direct, not Cloudflare
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.7'; // no CF headers => not fronted
 		$result                 = Cloudflare::check();
 
 		$this->assertSame( 'warn', $result['status'] );
 	}
 
-	public function test_check_passes_on_production_when_fronted(): void {
+	public function test_check_passes_on_production_when_fronted_and_ips_agree(): void {
 		putenv( 'PLATFORM_ENVIRONMENT_TYPE=production' );
 		\Upsun\Environment::reset();
 
-		$_SERVER['REMOTE_ADDR'] = '173.245.48.5'; // a Cloudflare edge
-		$result                 = Cloudflare::check();
+		// The Upsun router has already set REMOTE_ADDR to the real client, and
+		// it matches what Cloudflare reports.
+		$_SERVER['HTTP_CF_RAY']            = 'a1b2c3-MXP';
+		$_SERVER['REMOTE_ADDR']           = '2a0d:3341:b833:408::6659';
+		$_SERVER['HTTP_CF_CONNECTING_IP'] = '2a0d:3341:b833:408::6659';
 
-		$this->assertSame( 'pass', $result['status'] );
+		$this->assertSame( 'pass', Cloudflare::check()['status'] );
+	}
+
+	public function test_check_warns_when_fronted_but_remote_addr_disagrees(): void {
+		putenv( 'PLATFORM_ENVIRONMENT_TYPE=production' );
+		\Upsun\Environment::reset();
+
+		$_SERVER['HTTP_CF_RAY']            = 'a1b2c3-MXP';
+		$_SERVER['REMOTE_ADDR']           = '10.0.0.1';      // wrong (proxy leaked through)
+		$_SERVER['HTTP_CF_CONNECTING_IP'] = '203.0.113.7';   // real client
+
+		$this->assertSame( 'warn', Cloudflare::check()['status'] );
 	}
 
 	public function test_check_passes_on_previews_regardless_of_fronting(): void {

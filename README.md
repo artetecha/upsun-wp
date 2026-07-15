@@ -100,7 +100,7 @@ Skipping this step does **not** weaken the runtime preview protections (mail int
 
 | Module | What it does |
 |---|---|
-| `cloudflare` | For sites proxied by Cloudflare in front of the Upsun router: restores the real visitor IP into `REMOTE_ADDR` from `CF-Connecting-IP` — but only when the connecting peer is itself within a published Cloudflare range, so a header forged straight at the `*.upsun.app` origin is ignored. Normalises the request scheme from `CF-Visitor`. Optional shared-secret origin guard (off by default) rejects production requests that bypassed Cloudflare. Adds `wp upsun cloudflare purge` — the edge invalidation the Upsun router cache never had — with optional auto-purge of a post's URL on change, a Cloudflare health check, and a dashboard panel. Inert on environments Cloudflare does not front (previews, direct origin hits), so it is safe to leave enabled everywhere. |
+| `cloudflare` | For sites proxied by Cloudflare in front of the Upsun router. **The Upsun router already resolves the real client IP into `REMOTE_ADDR`** (verified: `REMOTE_ADDR` == `CF-Connecting-IP` == `X-Client-IP`, and Cloudflare's edge never appears in `REMOTE_ADDR`/`X-Forwarded-For`), so this module does **not** rewrite it — that would be redundant and, on a direct origin hit, spoofable. It detects Cloudflare via the `CF-Ray`/`CF-Connecting-IP` headers and adds a health check + dashboard panel that confirm fronting and that `REMOTE_ADDR` agrees with `CF-Connecting-IP`. Adds `wp upsun cloudflare purge` — the edge invalidation the Upsun router cache never had — with optional auto-purge of a post's URL on change, and an optional shared-secret origin guard (off by default) that rejects production requests bypassing Cloudflare. A raw-origin `REMOTE_ADDR` restoration path exists for consumers without an IP-resolving router, gated off by default (`upsun_cloudflare_restore_remote_addr`). Inert where Cloudflare isn't fronting, so it's safe to leave enabled everywhere. |
 | `environment-indicator` | Color-coded admin-bar badge (branch · environment type) with an Upsun Console link, a dashboard widget with environment metadata, and a matching banner on the login screen. |
 | `page-cache` | Emits `Cache-Control: public, max-age=0, s-maxage={ttl}` on anonymous, session-free page views so the Upsun router can cache them; optionally strips configured Set-Cookie headers (e.g. LMS guest sessions) to keep responses cacheable. Built-in bypass patterns cover core session cookies; commerce patterns come from the Integrations layer. `wp upsun cache-check <url>` (also a form in the dashboard Caching panel) explains any page's verdict: effective TTL, Set-Cookie spoilers, bypass-pattern matches, the route cookie allowlist (declared via `upsun_cache_check_route_cache` — Upsun does not expose it at runtime), and whether the fetch was a router HIT/MISS/BYPASS. |
 | `updates-policy` | Disables the in-app auto-update machinery (the filesystem is read-only; Composer is the update path), replaces the auto-update toggles with a note, and removes the core Site Health tests that would fail by design. |
@@ -158,8 +158,9 @@ Module boot is deferred to `muplugins_loaded` priority 0, so **any mu-plugin** c
 | `upsun_mu_modules` | `array<string, class-string>` | all modules | Add/remove/replace modules. |
 | `upsun_integrations` | `array<string, class-string>` | all integrations | Add/remove/replace third-party plugin integrations. |
 | `upsun_page_cache_ttl` | `int` | `600` | Shared-cache TTL in seconds; `<= 0` disables the header. |
-| `upsun_cloudflare_enabled` | `bool` | `true` | Load the Cloudflare module (the IP restoration self-gates on the CF ranges, so it is safe to leave on everywhere). |
-| `upsun_cloudflare_ip_ranges` | `string[]` | bundled CF v4+v6 CIDRs | The Cloudflare ranges trusted for header restoration. Override to refresh the bundled list (e.g. from a cron-updated option) without a plugin release. |
+| `upsun_cloudflare_enabled` | `bool` | `true` | Load the Cloudflare module (inert where Cloudflare isn't fronting, so safe to leave on everywhere). |
+| `upsun_cloudflare_restore_remote_addr` | `bool` | `false` | Rewrite `REMOTE_ADDR` from `CF-Connecting-IP` (gated on the CF ranges). **Leave off on Upsun** — the router already sets the real client IP. Only for raw-origin consumers with no IP-resolving router in front. |
+| `upsun_cloudflare_ip_ranges` | `string[]` | bundled CF v4+v6 CIDRs | Cloudflare ranges used by the raw-origin restoration path and the origin guard. Override to refresh the bundled list without a plugin release. |
 | `upsun_cloudflare_origin_secret` | `string` | `''` (from `CLOUDFLARE_ORIGIN_SECRET`) | Shared secret a CF Transform Rule injects on proxied requests. When set, production requests missing/mismatching it get a 403 (bypass guard). Empty = guard disabled. Read from an env var; never hard-code. |
 | `upsun_cloudflare_origin_secret_header` | `string` | `'HTTP_X_ORIGIN_SECRET'` | The `$_SERVER` key carrying the origin secret (i.e. `X-Origin-Secret`). |
 | `upsun_cloudflare_zone_id` | `string` | `''` (from `CLOUDFLARE_ZONE_ID`) | Cloudflare zone id for purge calls. |
@@ -275,8 +276,10 @@ milestones shipped (the "Upsun" wp-admin dashboard, SafePreviews, integrations
 architecture, `wp upsun cache-check`/`migrate`/`mounts`/`relationships --health`,
 opt-in sanitizers, writable-path and mount-usage advisors), and the plugin was
 extracted to this repository and published on Packagist. Latest: the
-`cloudflare` module (0.4.0) — real client-IP restoration, edge cache purge, and
-an optional origin guard for sites proxied by Cloudflare in front of the Upsun
-router. Next up in v0.4: the premium plugin vendoring toolkit (`wp upsun vendor`).
+`cloudflare` module (0.4.x) — Cloudflare-fronting awareness (health check +
+dashboard), edge cache purge, and an optional origin guard, for sites proxied by
+Cloudflare in front of the Upsun router (the router already provides the real
+client IP, so the module verifies rather than rewrites it). Next up in v0.4: the
+premium plugin vendoring toolkit (`wp upsun vendor`).
 Router cache purge remains blocked on a platform purge API — though the
 `cloudflare` module now purges the *edge* cache when Cloudflare fronts the site.

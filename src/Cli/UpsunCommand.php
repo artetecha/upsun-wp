@@ -653,22 +653,18 @@ class UpsunCommand {
 		$purge_ready = '' !== $credentials['zone'] && '' !== $credentials['token'];
 
 		if ( 'status' === $action ) {
-			$fronted = Cloudflare::is_fronted( $_SERVER, Cloudflare::trusted_ranges() );
+			// Fronting is a per-web-request signal (CF-Ray header); over the
+			// CLI there is no HTTP request, so this always reads "no" — that is
+			// expected, not a failure. Verify live fronting from a browser
+			// (Site Health) instead. purge_credentials is meaningful from CLI.
+			$fronted = Cloudflare::is_fronted( $_SERVER );
 
 			\WP_CLI\Utils\format_items(
 				$assoc_args['format'] ?? 'table',
 				array(
 					array(
 						'field' => 'fronting_this_request',
-						'value' => $fronted ? 'yes' : 'no',
-					),
-					array(
-						'field' => 'client_ip',
-						'value' => (string) ( $_SERVER['REMOTE_ADDR'] ?? '' ),
-					),
-					array(
-						'field' => 'trusted_ranges',
-						'value' => (string) count( Cloudflare::trusted_ranges() ),
+						'value' => $fronted ? 'yes' : 'no (expected over CLI — no HTTP request)',
 					),
 					array(
 						'field' => 'purge_credentials',

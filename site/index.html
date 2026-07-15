@@ -62,7 +62,7 @@
         Off-platform it <strong>fully no-ops</strong> — local dev and CI need no special-casing.
       </p>
       <ul class="badge-row" aria-label="Project facts">
-        <li class="badge badge-version">v0.4.0</li>
+        <li class="badge badge-version">v0.4.1</li>
         <li class="badge">MIT</li>
         <li class="badge">PHP 8.1+</li>
         <li class="badge">WordPress 6.0+</li>
@@ -263,8 +263,8 @@
       </article>
       <article class="card">
         <p class="card-kicker">cloudflare</p>
-        <h3>Real visitor IPs behind the proxy</h3>
-        <p>When Cloudflare fronts the router, restores the real client IP from <code>CF-Connecting-IP</code> — trusted only from published Cloudflare ranges, so a header forged at the origin is ignored. Plus edge cache purge (<code>wp upsun cloudflare purge</code>) and an optional origin guard. Inert where Cloudflare isn’t in front.</p>
+        <h3>Cloudflare-fronting, done right</h3>
+        <p>The Upsun router already hands your app the real client IP, so this doesn’t meddle with <code>REMOTE_ADDR</code> — it detects fronting from Cloudflare’s own headers and flags any mismatch in a health check. Adds the edge cache purge the router cache never had (<code>wp upsun cloudflare purge</code>) and an optional origin guard. Inert where Cloudflare isn’t in front.</p>
       </article>
       <article class="card">
         <p class="card-kicker">safe-previews</p>
@@ -557,7 +557,8 @@
           <li><strong>0.3.3</strong> — deploy migrations, <code>wp upsun migrate</code></li>
           <li><strong>0.3.4</strong> — relationship health (<code>wp upsun relationships --health</code>) + mount-usage module. <strong>v0.3 complete.</strong></li>
           <li><strong>0.3.5</strong> — extraction complete: this repo + <a href="https://packagist.org/packages/artetecha/upsun-wp">Packagist</a>, the <a href="https://github.com/artetecha/wordpress-upsun-starter">starter template</a> live, and a first-deploy fix caught by it</li>
-          <li><strong>0.4.0</strong> — <code>cloudflare</code> module: real client-IP restoration behind the proxy, edge cache purge (<code>wp upsun cloudflare purge</code>), and an optional origin guard</li>
+          <li><strong>0.4.0</strong> — <code>cloudflare</code> module: edge cache purge (<code>wp upsun cloudflare purge</code>) and an optional origin guard</li>
+          <li><strong>0.4.1</strong> — <code>cloudflare</code> fronting detection reworked for Upsun: the router already provides the real client IP, so detect via Cloudflare’s headers and verify rather than rewrite <code>REMOTE_ADDR</code></li>
         </ul>
       </div>
       <div class="roadmap-col">
