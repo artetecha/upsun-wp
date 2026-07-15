@@ -15,7 +15,7 @@
 | v0.3 | Deploy migrations (`wp upsun migrate`) | ✅ shipped in 0.3.3 (PR #52), verified by two live preview deploys, KEDS runs on it |
 | v0.3 | Relationship health (`wp upsun relationships --health`) | ✅ shipped in 0.3.4 (PR #54) |
 | v0.3 | Mount usage visibility (`mount-usage` module) | ✅ shipped in 0.3.4 (PR #54) |
-| v0.4 | Cloudflare front-end support (`cloudflare` module) | ✅ shipped in 0.4.0 (PR #1) — pending live verification |
+| v0.4 | Cloudflare front-end support (`cloudflare` module) | ✅ shipped in 0.4.0; reworked in 0.4.1 after live verification (Upsun router already resolves the client IP — detect via CF headers, don't rewrite REMOTE_ADDR) |
 | v0.4 | Premium plugin vendoring toolkit (`wp upsun vendor`) | ⬜ planned — the original 0.4.0 target, now a later 0.4.x (the cloudflare module took 0.4.0) |
 | — | Extraction to an independent repo | ✅ done — this repo, on Packagist as `artetecha/upsun-wp` |
 
@@ -318,31 +318,39 @@ rather than adding to it.
 
 ## v0.4+ / blocked on platform or demand
 
-### Cloudflare front-end support (`cloudflare` module) — implemented in 0.4.0
+### Cloudflare front-end support (`cloudflare` module) — 0.4.0, reworked in 0.4.1
 
-For sites that put Cloudflare in front of the Upsun router. Cloudflare then
-terminates the client connection, so the router — and PHP's `REMOTE_ADDR` —
-sees a Cloudflare edge address on every request. Anything keyed on the client
-IP (comment/order IPs, IP-based sessions such as an LMS guest session, rate
-limiters, fraud signals) is broken until the real IP is restored.
+For sites that put Cloudflare in front of the Upsun router.
 
-- **Client IP restoration** (the load-bearing piece): rewrite `REMOTE_ADDR`
-  from `CF-Connecting-IP`, but *only* when the connecting peer is itself in a
-  published Cloudflare range. The origin's `*.upsun.app` URL stays publicly
-  reachable, so a header forged directly at the origin must be ignored — the
-  CIDR check on the peer is what makes the header trustworthy. Runs
-  synchronously at `muplugins_loaded` priority 0 (module registered first) so
-  `REMOTE_ADDR` is correct before `init`. Scheme normalised from `CF-Visitor`.
-- **Bundled CF ranges** (v4+v6) so there is no runtime external request;
-  `upsun_cloudflare_ip_ranges` refreshes them without a release.
+**Design correction (0.4.1, from live verification on KEDS):** the original
+0.4.0 premise was that the app would see Cloudflare's edge as `REMOTE_ADDR` and
+need to restore the real IP from `CF-Connecting-IP` — true for a *raw* origin,
+but **wrong for Upsun**. The Upsun router resolves the client IP before PHP
+runs: on a proxied request `REMOTE_ADDR` == `CF-Connecting-IP` == `X-Client-IP`
+(all the real visitor), and Cloudflare's edge appears in *neither* `REMOTE_ADDR`
+*nor* `X-Forwarded-For`. So there is nothing to restore, the old range-based
+`is_fronted` could never match (→ a false Site Health warning), and rewriting
+`REMOTE_ADDR` from a header would only *reintroduce* spoofability on a direct
+`*.platformsh.site` hit.
+
+What the module actually does now:
+
+- **Fronting detection** via Cloudflare's own headers (`CF-Ray` /
+  `CF-Connecting-IP`) — the only reliable signal once the router has collapsed
+  the hop. Health check + dashboard panel report fronting, and warn if
+  `REMOTE_ADDR` disagrees with `CF-Connecting-IP` (a misconfig signal).
+- **No `REMOTE_ADDR` rewriting on Upsun** — the router owns it. A raw-origin
+  restoration path (range-gated, `CF-Connecting-IP`) remains for consumers
+  without an IP-resolving router, **off by default** behind
+  `upsun_cloudflare_restore_remote_addr`.
 - **Origin bypass guard** (off by default): a shared secret injected by a
   Cloudflare Transform Rule, checked on production, rejecting requests that
   skipped Cloudflare. Inert until a secret is set.
 - **Edge cache purge** — `wp upsun cloudflare purge [--all|--url=]`, a
   `purge()` helper, and optional auto-purge on post change. This is the
   invalidation the router cache never had (see below).
-- Cloudflare health check + dashboard panel; the module is inert on
-  environments Cloudflare does not front (previews, direct origin hits).
+- Bundled CF ranges (v4+v6, `upsun_cloudflare_ip_ranges`) for the raw-origin
+  path and the guard; the module is inert where Cloudflare isn't fronting.
 
 ### Premium plugin vendoring toolkit (`wp upsun vendor`)
 

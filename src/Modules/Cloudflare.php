@@ -89,10 +89,18 @@ class Cloudflare implements Module {
 	}
 
 	public function register(): void {
-		// Restore the client IP immediately, not on a later hook: REMOTE_ADDR
-		// must be correct before anything reads it (WooCommerce order IPs,
-		// IP-based LMS sessions, rate limiters all fire on init or later).
-		$this->restore_client_ip();
+		// On Upsun the router resolves the real client IP before PHP runs, so
+		// REMOTE_ADDR is already the visitor (verified: REMOTE_ADDR ==
+		// CF-Connecting-IP == X-Client-IP, and Cloudflare's edge never appears
+		// in REMOTE_ADDR/XFF). Rewriting it from CF-Connecting-IP is therefore
+		// redundant here — and worse, on a direct hit to the *.platformsh.site
+		// origin it would let a forged header override the router's correct
+		// value. So restoration is OFF by default and only meant for raw-origin
+		// consumers (no client-IP-resolving router in front). Opt in with the
+		// filter below.
+		if ( apply_filters( 'upsun_cloudflare_restore_remote_addr', false ) ) {
+			$this->restore_client_ip();
+		}
 
 		add_action( 'init', array( $this, 'maybe_block_direct_origin' ), 0 );
 		add_filter( 'upsun_site_health_tests', array( $this, 'add_health_check' ) );
@@ -141,16 +149,15 @@ class Cloudflare implements Module {
 	 * and whether purge credentials are configured.
 	 */
 	public function render_panel(): void {
-		$ranges      = self::trusted_ranges();
-		$fronted     = self::is_fronted( $_SERVER, $ranges );
+		$fronted     = self::is_fronted( $_SERVER );
 		$credentials = self::credentials();
 		$purge_ready = '' !== $credentials['zone'] && '' !== $credentials['token'];
 
 		$rows = array(
 			__( 'Fronting this request', 'upsun-mu-plugin' ) => $fronted ? __( 'yes', 'upsun-mu-plugin' ) : __( 'no', 'upsun-mu-plugin' ),
 			__( 'Client IP', 'upsun-mu-plugin' )            => (string) ( $_SERVER['REMOTE_ADDR'] ?? '—' ),
+			__( 'CF-Connecting-IP', 'upsun-mu-plugin' )     => (string) ( $_SERVER['HTTP_CF_CONNECTING_IP'] ?? '—' ),
 			__( 'Scheme', 'upsun-mu-plugin' )               => self::resolve_scheme( $_SERVER ) ?? '—',
-			__( 'Trusted ranges', 'upsun-mu-plugin' )       => (string) count( $ranges ),
 			__( 'Purge credentials', 'upsun-mu-plugin' )    => $purge_ready ? __( 'configured', 'upsun-mu-plugin' ) : __( 'not set', 'upsun-mu-plugin' ),
 		);
 
@@ -248,18 +255,19 @@ class Cloudflare implements Module {
 	}
 
 	/**
-	 * Whether this request reached the origin through a Cloudflare address.
-	 * Once restore_client_ip() has run, REMOTE_ADDR holds the real visitor,
-	 * so the original peer (preserved under UPSUN_ORIGINAL_REMOTE_ADDR) is
-	 * the authoritative signal; before restoration REMOTE_ADDR is the peer.
+	 * Whether this request transited Cloudflare.
 	 *
-	 * @param array    $server $_SERVER-shaped array.
-	 * @param string[] $ranges Trusted Cloudflare CIDR ranges.
+	 * On Upsun the router resolves the client IP before PHP, so Cloudflare's
+	 * edge address never appears in REMOTE_ADDR or X-Forwarded-For — an
+	 * IP-range check would always fail. The reliable signal is Cloudflare's
+	 * own request headers: CF-Ray (added to every proxied request) and
+	 * CF-Connecting-IP. Pure over $_SERVER.
+	 *
+	 * @param array $server $_SERVER-shaped array.
 	 */
-	public static function is_fronted( array $server, array $ranges ): bool {
-		$peer = (string) ( $server['UPSUN_ORIGINAL_REMOTE_ADDR'] ?? $server['REMOTE_ADDR'] ?? '' );
-
-		return '' !== $peer && self::ip_in_ranges( $peer, $ranges );
+	public static function is_fronted( array $server ): bool {
+		return '' !== (string) ( $server['HTTP_CF_RAY'] ?? '' )
+			|| '' !== (string) ( $server['HTTP_CF_CONNECTING_IP'] ?? '' );
 	}
 
 	/**
@@ -562,27 +570,44 @@ class Cloudflare implements Module {
 	 * @return array{status: string, message: string}
 	 */
 	public static function check(): array {
-		$fronted = self::is_fronted( $_SERVER, self::trusted_ranges() );
+		$fronted = self::is_fronted( $_SERVER );
 
 		if ( ! Environment::is_production() ) {
 			return array(
 				'status'  => 'pass',
 				'message' => $fronted
-					? __( 'Requests are arriving through Cloudflare and the client IP is being restored.', 'upsun-mu-plugin' )
-					: __( 'Non-production environment; Cloudflare is not fronting it (client IP restoration is inert, as expected).', 'upsun-mu-plugin' ),
+					? __( 'Requests are arriving through Cloudflare.', 'upsun-mu-plugin' )
+					: __( 'Non-production environment; Cloudflare is not fronting it, as expected.', 'upsun-mu-plugin' ),
 			);
 		}
 
-		if ( $fronted ) {
+		if ( ! $fronted ) {
 			return array(
-				'status'  => 'pass',
-				'message' => __( 'Production requests are arriving through Cloudflare; the real client IP is restored into REMOTE_ADDR.', 'upsun-mu-plugin' ),
+				'status'  => 'warn',
+				'message' => __( 'This request did not arrive through Cloudflare (no CF-Ray header). If Cloudflare should be fronting production, check the proxy (orange cloud) and DNS.', 'upsun-mu-plugin' ),
+			);
+		}
+
+		// Fronted. On Upsun the router puts the real client IP in REMOTE_ADDR;
+		// confirm it agrees with what Cloudflare reports as the visitor.
+		$cf_ip  = trim( (string) ( $_SERVER['HTTP_CF_CONNECTING_IP'] ?? '' ) );
+		$remote = (string) ( $_SERVER['REMOTE_ADDR'] ?? '' );
+
+		if ( '' !== $cf_ip && '' !== $remote && $cf_ip !== $remote ) {
+			return array(
+				'status'  => 'warn',
+				'message' => sprintf(
+					/* translators: 1: REMOTE_ADDR, 2: CF-Connecting-IP */
+					__( 'Cloudflare is fronting, but REMOTE_ADDR (%1$s) does not match CF-Connecting-IP (%2$s) — the recorded client IP may be wrong.', 'upsun-mu-plugin' ),
+					$remote,
+					$cf_ip
+				),
 			);
 		}
 
 		return array(
-			'status'  => 'warn',
-			'message' => __( 'This request did not arrive through a Cloudflare address. If Cloudflare should be fronting production, check the proxy (orange cloud) and DNS; until then REMOTE_ADDR is the direct client.', 'upsun-mu-plugin' ),
+			'status'  => 'pass',
+			'message' => __( 'Production requests are arriving through Cloudflare, and REMOTE_ADDR matches CF-Connecting-IP (the real client IP, resolved by the Upsun router).', 'upsun-mu-plugin' ),
 		);
 	}
 }
