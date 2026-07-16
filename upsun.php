@@ -15,7 +15,7 @@ if ( defined( 'UPSUN_MU_PLUGIN_DIR' ) ) {
 }
 
 define( 'UPSUN_MU_PLUGIN_DIR', __DIR__ );
-define( 'UPSUN_MU_PLUGIN_VERSION', '0.4.1' );
+define( 'UPSUN_MU_PLUGIN_VERSION', '0.4.2' );
 
 require_once __DIR__ . '/src/Environment.php';
 require_once __DIR__ . '/src/helpers.php';
@@ -33,6 +33,7 @@ require_once __DIR__ . '/src/Integrations/Wordfence.php';
 require_once __DIR__ . '/src/Integrations/UpdraftPlus.php';
 require_once __DIR__ . '/src/Integrations/WpRocket.php';
 require_once __DIR__ . '/src/Modules/Cloudflare.php';
+require_once __DIR__ . '/src/Modules/SecurityHeaders.php';
 require_once __DIR__ . '/src/Modules/EnvironmentIndicator.php';
 require_once __DIR__ . '/src/Modules/PageCache.php';
 require_once __DIR__ . '/src/Modules/UpdatesPolicy.php';

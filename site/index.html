@@ -62,7 +62,7 @@
         Off-platform it <strong>fully no-ops</strong> — local dev and CI need no special-casing.
       </p>
       <ul class="badge-row" aria-label="Project facts">
-        <li class="badge badge-version">v0.4.1</li>
+        <li class="badge badge-version">v0.4.2</li>
         <li class="badge">MIT</li>
         <li class="badge">PHP 8.1+</li>
         <li class="badge">WordPress 6.0+</li>
@@ -237,7 +237,7 @@
 <section class="section section-alt" id="modules">
   <div class="container">
     <header class="section-head reveal">
-      <p class="section-kicker">Twelve modules</p>
+      <p class="section-kicker">Thirteen modules</p>
       <h2>Everything WordPress needs to know about its platform.</h2>
       <p class="section-sub">
         Each module is independently switchable — a <code>UPSUN_DISABLE_*</code> constant in
@@ -265,6 +265,11 @@
         <p class="card-kicker">cloudflare</p>
         <h3>Cloudflare-fronting, done right</h3>
         <p>The Upsun router already hands your app the real client IP, so this doesn’t meddle with <code>REMOTE_ADDR</code> — it detects fronting from Cloudflare’s own headers and flags any mismatch in a health check. Adds the edge cache purge the router cache never had (<code>wp upsun cloudflare purge</code>) and an optional origin guard. Inert where Cloudflare isn’t in front.</p>
+      </article>
+      <article class="card">
+        <p class="card-kicker">security-headers</p>
+        <h3>Headers on the page config can’t reach</h3>
+        <p>Upsun’s <code>web.locations</code> headers only decorate static files — the HTML document takes its headers from the app. This module emits <code>nosniff</code>, <code>Referrer-Policy</code> and <code>X-Frame-Options</code> where they matter. HSTS is set once: emitted directly on a direct-Upsun site, or deferred to Cloudflare when it’s fronting — and it tells you which.</p>
       </article>
       <article class="card">
         <p class="card-kicker">safe-previews</p>
@@ -488,7 +493,7 @@
       </li>
     </ol>
     <p class="install-note reveal">
-      That’s it. On Upsun, twelve modules light up. On your laptop and in CI, the plugin loads
+      That’s it. On Upsun, thirteen modules light up. On your laptop and in CI, the plugin loads
       and does nothing — <strong>zero special-casing, zero config files to fake</strong>.
     </p>
   </div>
@@ -559,6 +564,7 @@
           <li><strong>0.3.5</strong> — extraction complete: this repo + <a href="https://packagist.org/packages/artetecha/upsun-wp">Packagist</a>, the <a href="https://github.com/artetecha/wordpress-upsun-starter">starter template</a> live, and a first-deploy fix caught by it</li>
           <li><strong>0.4.0</strong> — <code>cloudflare</code> module: edge cache purge (<code>wp upsun cloudflare purge</code>) and an optional origin guard</li>
           <li><strong>0.4.1</strong> — <code>cloudflare</code> fronting detection reworked for Upsun: the router already provides the real client IP, so detect via Cloudflare’s headers and verify rather than rewrite <code>REMOTE_ADDR</code></li>
+          <li><strong>0.4.2</strong> — <code>security-headers</code> module: baseline headers on the HTML document (which <code>config.yaml</code> can’t reach), HSTS emitted directly or deferred to Cloudflare when it fronts the request</li>
         </ul>
       </div>
       <div class="roadmap-col">
