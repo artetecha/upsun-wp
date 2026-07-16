@@ -16,6 +16,7 @@
 | v0.3 | Relationship health (`wp upsun relationships --health`) | ✅ shipped in 0.3.4 (PR #54) |
 | v0.3 | Mount usage visibility (`mount-usage` module) | ✅ shipped in 0.3.4 (PR #54) |
 | v0.4 | Cloudflare front-end support (`cloudflare` module) | ✅ shipped in 0.4.0; reworked in 0.4.1 after live verification (Upsun router already resolves the client IP — detect via CF headers, don't rewrite REMOTE_ADDR) |
+| v0.4 | Security headers (`security-headers` module) | ✅ shipped in 0.4.2 — baseline headers on the HTML document (config.yaml `headers` are static-only), HSTS emitted directly or deferred to Cloudflare when it fronts the request |
 | v0.4 | Premium plugin vendoring toolkit (`wp upsun vendor`) | ⬜ planned — the original 0.4.0 target, now a later 0.4.x (the cloudflare module took 0.4.0) |
 | — | Extraction to an independent repo | ✅ done — this repo, on Packagist as `artetecha/upsun-wp` |
 
@@ -351,6 +352,26 @@ What the module actually does now:
   invalidation the router cache never had (see below).
 - Bundled CF ranges (v4+v6, `upsun_cloudflare_ip_ranges`) for the raw-origin
   path and the guard; the module is inert where Cloudflare isn't fronting.
+
+### Security headers (`security-headers` module) — 0.4.2
+
+Baseline response headers for the front end: `X-Content-Type-Options: nosniff`,
+`Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: SAMEORIGIN`.
+
+**Why in PHP and not `config.yaml`:** on Upsun, `web.locations` `headers` only
+decorate *static* files — dynamic responses (the WordPress HTML via passthru)
+take headers from the app. Since these protections are about the HTML document,
+config can't deliver them; the module emits them on `send_headers`. (A `nosniff`
+header still belongs in `config.yaml` too, as defense-in-depth on static assets
+— that's a per-repo config change, not part of this module.)
+
+**HSTS, handled once:** it reuses `Cloudflare::is_fronted()`. When the request
+is proxied by Cloudflare, the edge owns HSTS and the module defers (no duplicate
+header); otherwise, on a direct-Upsun production site over HTTPS, it emits HSTS
+itself (`upsun_security_hsts`, `upsun_security_hsts_value`; conservative default,
+production-only, no `includeSubDomains`/`preload`). Site Health and the dashboard
+report which path is active. CSP is deliberately out of scope (inherently
+per-site); the full set is filterable via `upsun_security_headers`.
 
 ### Premium plugin vendoring toolkit (`wp upsun vendor`)
 

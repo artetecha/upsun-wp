@@ -261,6 +261,7 @@ require_once dirname( __DIR__ ) . '/src/IntegrationRegistry.php';
 require_once dirname( __DIR__ ) . '/src/Integrations/WooCommerce.php';
 require_once dirname( __DIR__ ) . '/src/Integrations/WooCommerceStripe.php';
 require_once dirname( __DIR__ ) . '/src/Modules/Cloudflare.php';
+require_once dirname( __DIR__ ) . '/src/Modules/SecurityHeaders.php';
 require_once dirname( __DIR__ ) . '/src/Modules/EnvironmentIndicator.php';
 require_once dirname( __DIR__ ) . '/src/Modules/PageCache.php';
 require_once dirname( __DIR__ ) . '/src/Modules/UpdatesPolicy.php';

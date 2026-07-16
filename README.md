@@ -101,6 +101,7 @@ Skipping this step does **not** weaken the runtime preview protections (mail int
 | Module | What it does |
 |---|---|
 | `cloudflare` | For sites proxied by Cloudflare in front of the Upsun router. **The Upsun router already resolves the real client IP into `REMOTE_ADDR`** (verified: `REMOTE_ADDR` == `CF-Connecting-IP` == `X-Client-IP`, and Cloudflare's edge never appears in `REMOTE_ADDR`/`X-Forwarded-For`), so this module does **not** rewrite it — that would be redundant and, on a direct origin hit, spoofable. It detects Cloudflare via the `CF-Ray`/`CF-Connecting-IP` headers and adds a health check + dashboard panel that confirm fronting and that `REMOTE_ADDR` agrees with `CF-Connecting-IP`. Adds `wp upsun cloudflare purge` — the edge invalidation the Upsun router cache never had — with optional auto-purge of a post's URL on change, and an optional shared-secret origin guard (off by default) that rejects production requests bypassing Cloudflare. A raw-origin `REMOTE_ADDR` restoration path exists for consumers without an IP-resolving router, gated off by default (`upsun_cloudflare_restore_remote_addr`). Inert where Cloudflare isn't fronting, so it's safe to leave enabled everywhere. |
+| `security-headers` | Emits baseline security response headers on the front end — `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: SAMEORIGIN`. These protect the **HTML document**, which on Upsun can't be covered from `config.yaml` (its `web.locations` `headers` only decorate static files; dynamic passthru responses get headers from the app). HSTS is handled deliberately: when the `cloudflare` module detects the request is proxied, the edge owns HSTS and this module **defers** (no duplicate header) — otherwise, on a direct-Upsun production site over HTTPS, it emits HSTS itself. Either way there's exactly one source, and Site Health + the dashboard say which. CSP is intentionally left to consumers (it's inherently per-site). Header set is filterable via `upsun_security_headers`. |
 | `environment-indicator` | Color-coded admin-bar badge (branch · environment type) with an Upsun Console link, a dashboard widget with environment metadata, and a matching banner on the login screen. |
 | `page-cache` | Emits `Cache-Control: public, max-age=0, s-maxage={ttl}` on anonymous, session-free page views so the Upsun router can cache them; optionally strips configured Set-Cookie headers (e.g. LMS guest sessions) to keep responses cacheable. Built-in bypass patterns cover core session cookies; commerce patterns come from the Integrations layer. `wp upsun cache-check <url>` (also a form in the dashboard Caching panel) explains any page's verdict: effective TTL, Set-Cookie spoilers, bypass-pattern matches, the route cookie allowlist (declared via `upsun_cache_check_route_cache` — Upsun does not expose it at runtime), and whether the fetch was a router HIT/MISS/BYPASS. |
 | `updates-policy` | Disables the in-app auto-update machinery (the filesystem is read-only; Composer is the update path), replaces the auto-update toggles with a note, and removes the core Site Health tests that would fail by design. |
@@ -144,7 +145,7 @@ integrations do.
 ### Constants (wp-config friendly)
 
 - `UPSUN_MU_DISABLE` — kill switch for the whole plugin.
-- `UPSUN_DISABLE_CLOUDFLARE`, `UPSUN_DISABLE_ENVIRONMENT_INDICATOR`, `UPSUN_DISABLE_PAGE_CACHE`, `UPSUN_DISABLE_UPDATES_POLICY`, `UPSUN_DISABLE_SITE_HEALTH`, `UPSUN_DISABLE_PREVIEW_PROTECTION`, `UPSUN_DISABLE_SMTP`, `UPSUN_DISABLE_DASHBOARD`, `UPSUN_DISABLE_CRON_HEARTBEAT`, `UPSUN_DISABLE_SAFE_PREVIEWS`, `UPSUN_DISABLE_WRITABLE_PATHS`, `UPSUN_DISABLE_MOUNT_USAGE` — per-module switches.
+- `UPSUN_DISABLE_CLOUDFLARE`, `UPSUN_DISABLE_SECURITY_HEADERS`, `UPSUN_DISABLE_ENVIRONMENT_INDICATOR`, `UPSUN_DISABLE_PAGE_CACHE`, `UPSUN_DISABLE_UPDATES_POLICY`, `UPSUN_DISABLE_SITE_HEALTH`, `UPSUN_DISABLE_PREVIEW_PROTECTION`, `UPSUN_DISABLE_SMTP`, `UPSUN_DISABLE_DASHBOARD`, `UPSUN_DISABLE_CRON_HEARTBEAT`, `UPSUN_DISABLE_SAFE_PREVIEWS`, `UPSUN_DISABLE_WRITABLE_PATHS`, `UPSUN_DISABLE_MOUNT_USAGE` — per-module switches.
 - `UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE`, `UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE_STRIPE` — per-integration switches.
 - `UPSUN_MIGRATIONS_DIR` — directory of deploy migrations (see below); unset = feature idle.
 - `UPSUN_MU_FORCE` — boot modules and integrations off-platform (testing against faked `PLATFORM_*` variables).
@@ -167,6 +168,10 @@ Module boot is deferred to `muplugins_loaded` priority 0, so **any mu-plugin** c
 | `upsun_cloudflare_api_token` | `string` | `''` (from `CLOUDFLARE_API_TOKEN`) | Cloudflare API token for purge calls — scope it to Zone → Cache Purge only. |
 | `upsun_cloudflare_auto_purge` | `bool` | `false` | Purge a post's URL(s) from the Cloudflare edge when its cache is cleaned. |
 | `upsun_cloudflare_post_purge_urls` | `string[]` | `[ permalink ]` | The URLs purged for a changed post when auto-purge is on. |
+| `upsun_security_headers_enabled` | `bool` | `true` | Load the security-headers module. |
+| `upsun_security_headers` | `array<string,string>` | the baseline set (+ HSTS when applicable) | The response headers sent on the front end. Add keys (e.g. a `Content-Security-Policy`) or set one to `''` to drop it. CR/LF in values is stripped. |
+| `upsun_security_hsts` | `bool` | production only | Whether this app emits HSTS itself. Only consulted when on HTTPS and **not** fronted by Cloudflare (when fronted, HSTS is deferred to the edge regardless). |
+| `upsun_security_hsts_value` | `string` | `max-age=15552000` (180 days) | The `Strict-Transport-Security` value. Lengthen `max-age` / add `includeSubDomains`/`preload` once you're sure. |
 | `upsun_page_cache_bypass_cookie_patterns` | `string[]` | WP/Woo/session regexes | Cookie names that mark a request personalised. |
 | `upsun_page_cache_strip_cookies` | `string[]` | `[]` | Cookie-name prefixes whose Set-Cookie headers are stripped from anonymous responses. |
 | `upsun_page_cache_skip` | `bool` | `false` | Skip cache headers for the current request (plugin-specific dynamic pages). |
@@ -279,7 +284,10 @@ extracted to this repository and published on Packagist. Latest: the
 `cloudflare` module (0.4.x) — Cloudflare-fronting awareness (health check +
 dashboard), edge cache purge, and an optional origin guard, for sites proxied by
 Cloudflare in front of the Upsun router (the router already provides the real
-client IP, so the module verifies rather than rewrites it). Next up in v0.4: the
+client IP, so the module verifies rather than rewrites it), and the
+`security-headers` module (0.4.2) — baseline response headers on the HTML
+document (which `config.yaml` can't reach), with HSTS emitted directly or
+deferred to Cloudflare when it fronts the request. Next up in v0.4: the
 premium plugin vendoring toolkit (`wp upsun vendor`).
 Router cache purge remains blocked on a platform purge API — though the
 `cloudflare` module now purges the *edge* cache when Cloudflare fronts the site.
