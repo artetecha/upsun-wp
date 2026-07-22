@@ -17,15 +17,15 @@
 | v0.3 | Mount usage visibility (`mount-usage` module) | ✅ shipped in 0.3.4 (PR #54) |
 | v0.4 | Cloudflare front-end support (`cloudflare` module) | ✅ shipped in 0.4.0; reworked in 0.4.1 after live verification (Upsun router already resolves the client IP — detect via CF headers, don't rewrite REMOTE_ADDR) |
 | v0.4 | Security headers (`security-headers` module) | ✅ shipped in 0.4.2 — baseline headers on the HTML document (config.yaml `headers` are static-only), HSTS emitted directly or deferred to Cloudflare when it fronts the request |
-| v0.4 | Premium plugin vendoring toolkit (`wp upsun vendor`) | ⬜ planned — the original 0.4.0 target, now a later 0.4.x (the cloudflare module took 0.4.0) |
+| v0.4 | Premium plugin vendoring toolkit (`wp upsun vendor`) | ✅ shipped in 0.4.3 — `wp upsun vendor <slug>` exports an installed plugin/theme as a Composer package; `--check-updates` + the `vendored_updates` check flag premium updates Composer won't catch |
 | — | Extraction to an independent repo | ✅ done — this repo, on Packagist as `artetecha/upsun-wp` |
 
 **v0.3 is complete, and the extraction is done:** the plugin lives in its own
 repository (`github.com/artetecha/upsun-wp`, published on Packagist as
 `artetecha/upsun-wp`, site at `upsun.artetecha.com`) and KEDS consumes it as a
 normal Composer package. **v0.4 opened with the `cloudflare` module (0.4.0)**
-rather than the originally planned vendoring toolkit, which slips to a later
-0.4.x.
+rather than the originally planned vendoring toolkit, which then shipped in
+0.4.3.
 
 Each milestone spans point releases (e.g. 0.2.x, 0.3.x, 0.4.x); version =
 package `composer.json` / `UPSUN_MU_PLUGIN_VERSION`.
@@ -373,7 +373,7 @@ production-only, no `includeSubDomains`/`preload`). Site Health and the dashboar
 report which path is active. CSP is deliberately out of scope (inherently
 per-site); the full set is filterable via `upsun_security_headers`.
 
-### Premium plugin vendoring toolkit (`wp upsun vendor`)
+### Premium plugin vendoring toolkit (`wp upsun vendor`) — shipped in 0.4.3
 
 Read-only filesystems plus `DISALLOW_FILE_MODS` mean premium plugins cannot
 self-update, so every WP-on-Upsun project reinvents vendoring them as

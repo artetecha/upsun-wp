@@ -199,6 +199,19 @@ function wp_cache_flush() {
 	return true;
 }
 
+// Site-transient store for the vendored-updates check.
+$GLOBALS['upsun_test_site_transients'] = array();
+
+function get_site_transient( $key ) {
+	return $GLOBALS['upsun_test_site_transients'][ $key ] ?? false;
+}
+
+function set_site_transient( $key, $value, $ttl = 0 ) {
+	$GLOBALS['upsun_test_site_transients'][ $key ] = $value;
+
+	return true;
+}
+
 // Fresh-database simulation for the pre-install scheduler guards.
 $GLOBALS['upsun_test_blog_installed'] = true;
 
@@ -254,6 +267,7 @@ require_once dirname( __DIR__ ) . '/src/CacheCheck.php';
 require_once dirname( __DIR__ ) . '/src/Sanitizers.php';
 require_once dirname( __DIR__ ) . '/src/Migrations.php';
 require_once dirname( __DIR__ ) . '/src/RelationshipHealth.php';
+require_once dirname( __DIR__ ) . '/src/Vendor.php';
 require_once dirname( __DIR__ ) . '/src/Module.php';
 require_once dirname( __DIR__ ) . '/src/ModuleRegistry.php';
 require_once dirname( __DIR__ ) . '/src/Integration.php';

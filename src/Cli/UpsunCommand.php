@@ -5,6 +5,7 @@ namespace Upsun\Cli;
 use Upsun\CacheCheck;
 use Upsun\Environment;
 use Upsun\Migrations;
+use Upsun\Vendor;
 use Upsun\Modules\Cloudflare;
 use Upsun\Modules\SafePreviews;
 use Upsun\Modules\SiteHealth;
@@ -612,6 +613,126 @@ class UpsunCommand {
 		}
 
 		WP_CLI::success( 'Object cache flushed. Note: the Upsun router cache has no purge API; cached pages expire by TTL or on redeploy.' );
+	}
+
+	/**
+	 * Vendors a premium plugin/theme as a Composer package, or checks vendored packages for updates.
+	 *
+	 * Premium plugins and themes can't self-update on a read-only filesystem,
+	 * so they're vendored as Composer path packages. This exports an installed
+	 * one as a ready-to-commit package (a composer.json generated from its
+	 * header, source copied to <to>/<slug>/); --check-updates instead reports
+	 * installed plugins/themes with a pending update, flagging the
+	 * premium/external ones Composer will not catch. Works off-platform too.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [<slug>]
+	 * : Plugin or theme directory slug to export. Required unless --check-updates.
+	 *
+	 * [--type=<type>]
+	 * : Treat the slug as a plugin or theme. Auto-detected when omitted.
+	 * ---
+	 * options:
+	 *   - plugin
+	 *   - theme
+	 * ---
+	 *
+	 * [--to=<dir>]
+	 * : Directory to write the package into (a <slug>/ subdirectory is created). Default: the current directory.
+	 *
+	 * [--vendor=<vendor>]
+	 * : Composer vendor namespace for the generated package name. Default: private.
+	 *
+	 * [--license=<license>]
+	 * : SPDX license for the generated composer.json. Default: the header's license, else "proprietary".
+	 *
+	 * [--check-updates]
+	 * : List installed plugins/themes with a pending update instead of exporting, flagging premium/external ones.
+	 *
+	 * [--format=<format>]
+	 * : Render --check-updates output in a particular format.
+	 * ---
+	 * default: table
+	 * options:
+	 *   - table
+	 *   - json
+	 *   - yaml
+	 *   - csv
+	 * ---
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp upsun vendor learnpress-stripe
+	 *     wp upsun vendor eduma --type=theme --to=private-packages/themes --vendor=keds-theme
+	 *     wp upsun vendor --check-updates
+	 */
+	public function vendor( $args, $assoc_args ) {
+		if ( ! empty( $assoc_args['check-updates'] ) ) {
+			$rows = Vendor::available_updates();
+
+			\WP_CLI\Utils\format_items(
+				$assoc_args['format'] ?? 'table',
+				array_map(
+					static function ( array $row ) {
+						return array(
+							'slug'    => $row['slug'],
+							'type'    => $row['type'],
+							'current' => $row['current'],
+							'new'     => $row['new'],
+							'source'  => $row['source'],
+						);
+					},
+					$rows
+				),
+				array( 'slug', 'type', 'current', 'new', 'source' )
+			);
+
+			$external = array_filter( $rows, static fn ( array $row ) => 'external' === $row['source'] );
+
+			if ( array() === $external ) {
+				WP_CLI::success( 'No premium/external updates pending. wordpress.org updates (if any above) flow through Composer/wpackagist.' );
+				return;
+			}
+
+			WP_CLI::warning( sprintf(
+				'%d premium/external update(s) pending — Composer will not catch these; re-vendor with "wp upsun vendor <slug>": %s',
+				count( $external ),
+				implode( ', ', array_map( static fn ( array $r ) => $r['slug'], $external ) )
+			) );
+			return;
+		}
+
+		$slug = (string) ( $args[0] ?? '' );
+
+		if ( '' === $slug ) {
+			WP_CLI::error( 'Provide a plugin or theme slug to vendor, or use --check-updates.' );
+		}
+
+		try {
+			$result = Vendor::export(
+				$slug,
+				array(
+					'type'    => (string) ( $assoc_args['type'] ?? '' ),
+					'to'      => (string) ( $assoc_args['to'] ?? '.' ),
+					'vendor'  => (string) ( $assoc_args['vendor'] ?? 'private' ),
+					'license' => (string) ( $assoc_args['license'] ?? '' ),
+				)
+			);
+		} catch ( \Throwable $exception ) {
+			WP_CLI::error( $exception->getMessage() );
+		}
+
+		WP_CLI::success( sprintf(
+			'Vendored %s "%s" as %s %s → %s (%d files). Add it as a Composer path repository and require %s.',
+			$result['type'],
+			$slug,
+			$result['name'],
+			'' !== $result['version'] ? $result['version'] : '(no version in header)',
+			$result['path'],
+			$result['files'],
+			$result['name']
+		) );
 	}
 
 	/**

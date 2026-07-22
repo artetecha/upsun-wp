@@ -56,6 +56,10 @@ class SiteHealth implements Module {
 				'label'    => __( 'Disk usage', 'upsun-mu-plugin' ),
 				'callback' => array( MountUsage::class, 'check' ),
 			),
+			'vendored_updates'  => array(
+				'label'    => __( 'Vendored package updates', 'upsun-mu-plugin' ),
+				'callback' => array( \Upsun\Vendor::class, 'check' ),
+			),
 		);
 
 		/**
