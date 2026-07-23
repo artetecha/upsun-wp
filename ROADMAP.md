@@ -17,15 +17,16 @@
 | v0.3 | Mount usage visibility (`mount-usage` module) | ✅ shipped in 0.3.4 (PR #54) |
 | v0.4 | Cloudflare front-end support (`cloudflare` module) | ✅ shipped in 0.4.0; reworked in 0.4.1 after live verification (Upsun router already resolves the client IP — detect via CF headers, don't rewrite REMOTE_ADDR) |
 | v0.4 | Security headers (`security-headers` module) | ✅ shipped in 0.4.2 — baseline headers on the HTML document (config.yaml `headers` are static-only), HSTS emitted directly or deferred to Cloudflare when it fronts the request |
-| v0.4 | Premium plugin vendoring toolkit (`wp upsun vendor`) | ⬜ planned — the original 0.4.0 target, now a later 0.4.x (the cloudflare module took 0.4.0) |
+| v0.4 | Premium plugin vendoring toolkit (`wp upsun vendor`) | ✅ shipped in 0.4.3 — `wp upsun vendor <slug>` exports an installed plugin/theme as a Composer package; `--check-updates` + the `vendored_updates` check flag premium updates Composer won't catch |
+| v0.5 | Programmatic vendored-update fetching (`wp upsun vendor --update`) | ✅ shipped in 0.5.0 — a `Fetcher` registry (built-in `TransientFetcher` + per-vendor add-ons) downloads/extracts/re-vendors, merging over the upstream composer.json; credentials come from site state, never env |
 | — | Extraction to an independent repo | ✅ done — this repo, on Packagist as `artetecha/upsun-wp` |
 
 **v0.3 is complete, and the extraction is done:** the plugin lives in its own
 repository (`github.com/artetecha/upsun-wp`, published on Packagist as
 `artetecha/upsun-wp`, site at `upsun.artetecha.com`) and KEDS consumes it as a
 normal Composer package. **v0.4 opened with the `cloudflare` module (0.4.0)**
-rather than the originally planned vendoring toolkit, which slips to a later
-0.4.x.
+rather than the originally planned vendoring toolkit, which then shipped in
+0.4.3.
 
 Each milestone spans point releases (e.g. 0.2.x, 0.3.x, 0.4.x); version =
 package `composer.json` / `UPSUN_MU_PLUGIN_VERSION`.
@@ -373,7 +374,7 @@ production-only, no `includeSubDomains`/`preload`). Site Health and the dashboar
 report which path is active. CSP is deliberately out of scope (inherently
 per-site); the full set is filterable via `upsun_security_headers`.
 
-### Premium plugin vendoring toolkit (`wp upsun vendor`)
+### Premium plugin vendoring toolkit (`wp upsun vendor`) — shipped in 0.4.3
 
 Read-only filesystems plus `DISALLOW_FILE_MODS` mean premium plugins cannot
 self-update, so every WP-on-Upsun project reinvents vendoring them as
@@ -393,9 +394,70 @@ daily premium-update PRs). Three layers, two homes:
   scaffolding — `private-packages/` layout, per-package composer.json
   template, source manifest, example update workflow. Depends on the
   extraction plan's starter repo.
-- **Consumer-side forever**: vendor-specific license/auth update automation
-  (ThimPress/Fluent/RevSlider flows) — per-vendor knowledge that may grow
-  into Integration classes on demand, like everything else plugin-specific.
+- **Fetching new versions** was first scoped "consumer-side forever," but
+  most of it generalizes — see "Programmatic vendored-update fetching (v0.5)"
+  below. Only each vendor's *discovery call* stays specific, as a registered
+  fetcher add-on.
+
+### Programmatic vendored-update fetching — shipped in 0.5.0
+
+`wp upsun vendor <slug>` (0.4.3) automates *onboarding* a premium package, and
+`--check-updates` *detects* when one falls behind — but re-vendoring the new
+version is still done by hand or by consumer-specific scripts (KEDS's
+`thim-update.sh` + `premium-update.sh`). Those two scripts are really one
+generic case plus one exception, so the fetching harness generalizes, with
+per-vendor add-ons for the single question that does not: *how do I find the
+authenticated download for this package?* Shipped in 0.5.0 with the built-in
+`TransientFetcher`; vendor-specific fetchers (e.g. ThimPress) register via
+`upsun_vendor_fetchers`.
+
+Shape — mirrors the Integrations registry:
+
+- A `Fetcher` interface — `supports( slug, type )`,
+  `available_update( slug ): ?{version, url}`, `download( slug, url, dest )` —
+  behind an `upsun_vendor_fetchers` registry filter.
+- A bundled **`TransientFetcher`** (default, lowest priority): reads the
+  `update_plugins`/`update_themes` transient, where standard licensed updaters
+  (Fluent, PMPro, most EDD-based plugins) inject an already-authenticated
+  `package` URL. This one fetcher subsumes almost all of `premium-update.sh`.
+- Per-vendor add-ons for the non-standard cases — e.g. a **`ThimPress`**
+  fetcher (Eduma, `thim-*`) that calls ThimPress's market API through
+  thim-core, gated on `class_exists()` like every integration. That is
+  `thim-update.sh` as a class. Add-ons start consumer-side and graduate into
+  the plugin on demand (the compat-fix policy).
+- A shared **re-vendor engine** (with the export command): download → extract
+  → write composer.json by **merging over the upstream file**, never
+  generating fresh, so runtime-load-bearing keys survive (the
+  `fluentcampaign-pro` `extra.wpfluent.namespace` lesson).
+- CLI: `wp upsun vendor --update <slug>` / `--update-all` (`--dry-run` aware),
+  emitting the changed files plus a machine-readable report.
+
+**Credentials never come from env or config — this is the load-bearing
+contract.** Every fetcher reads its authentication from the *site's own stored
+state*: the transient the updater already populated, or the vendor's
+registration record in the database (ThimPress reads its purchase token via
+`Thim_Product_Registration`). KEDS's "tokens never leave the container"
+guarantee then holds for free — the secret is already *in* the cloned
+database, nothing is injected from outside, so there is no `*_LICENSE` env var
+and no committed key. A consumer whose license is not in the DB is simply out
+of scope.
+
+**The one real constraint is run-location, not secrets.** A fetcher must run
+where the activated database is — the production container, or even a preview
+clone, since the token clones with the DB — while file writes land somewhere
+writable (CI or a local checkout). That discovery-needs-the-DB /
+writes-need-a-writable-FS split is inherent; the command surface should make
+it explicit rather than hide it.
+
+Stays in the consumer/CI layer: raising one PR per updated package. The
+plugin's job ends at "produced the new vendored files + a report of what
+changed"; committing and opening PRs is GitHub-Actions glue that belongs in
+the consuming repo (or the starter repo as a template workflow) — exactly
+where KEDS's `thim-update.yml` lives today.
+
+This revises the "consumer-side forever" note above: the dispatch, the generic
+transient fetcher, and the re-vendor engine move into the plugin; only each
+vendor's discovery call remains an add-on.
 
 ### Other
 

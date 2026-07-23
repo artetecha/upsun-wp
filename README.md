@@ -234,6 +234,61 @@ database on purpose — a preview cloned from production carries them along
 with the already-migrated data, so nothing re-runs. A shared health check
 warns everywhere when migrations are pending and fails on misnamed files.
 
+### Vendoring premium plugins
+
+A read-only filesystem plus `DISALLOW_FILE_MODS` means premium plugins and
+themes can't self-update, so they're vendored as Composer path packages.
+`wp upsun vendor <slug>` does the mechanical onboarding step for you: it reads
+the installed plugin/theme header and writes a ready-to-commit package to
+`<to>/<slug>/` — a generated `composer.json` (name `<vendor>/<slug>`, type
+`wordpress-plugin`/`wordpress-theme`, version/homepage/author from the
+header, `composer/installers` required) alongside a copy of the source.
+
+```bash
+wp upsun vendor learnpress-stripe --to=private-packages/plugins --vendor=keds-plugin
+# → private-packages/plugins/learnpress-stripe/{composer.json, …source}
+```
+
+Add the target as a Composer `path` repository and require the generated
+name. This is a local/onboarding command (it writes files, so run it against
+a writable checkout, not the read-only production runtime), and it works
+off-platform.
+
+Staying current is the other half: `wp upsun vendor --check-updates` reads
+the `update_plugins`/`update_themes` transients and lists everything with a
+pending update, flagging each as `wporg` (Composer/wpackagist handles it via
+a version bump) or `external` (premium/vendored — Composer will **not** catch
+it; you must re-vendor). The `vendored_updates` health check surfaces the
+same, warning through Site Health / the dashboard / `wp upsun doctor` when
+external updates are pending. Best-effort by nature: premium plugins that
+suppress their own update check under `DISALLOW_FILE_MODS` won't appear.
+
+And `wp upsun vendor <slug> --update` re-vendors the new version in place:
+a **fetcher** resolves the authenticated download, then the package is
+downloaded, extracted, and written to `<to>/<slug>/` with its `composer.json`
+**merged over the upstream one** — so runtime-load-bearing keys (like
+`fluentcampaign-pro`'s `extra.wpfluent.namespace`) survive, and the existing
+package's vendor namespace is kept. `--update-all` does every resolvable
+one; `--dry-run` previews.
+
+```bash
+wp upsun vendor learnpress-stripe --update --to=private-packages/plugins
+```
+
+Fetchers are the one pluggable piece, registered via `upsun_vendor_fetchers`
+(the Integrations pattern). The built-in `TransientFetcher` handles the whole
+class of standard licensed updaters — it reads the authenticated `package`
+URL the updater already put in the transient. **Credentials are never taken
+from env or config**: a fetcher reads them from the site's own state (the
+transient, or a vendor's registration record in the DB), so the token never
+leaves the environment it already lives in. A vendor whose update mechanism
+isn't the standard transient (e.g. ThimPress's catalog) is a small fetcher
+add-on you register — its `available_update()` reads its own token from the
+DB, same contract. Because discovery needs the activated DB and the writes
+need a writable filesystem, `--update` runs where both hold (a local/CI
+checkout with the license, or the container writing to a mount); raising a PR
+per package stays your CI's job.
+
 ### Helper functions
 
 `Upsun\is_upsun()`, `Upsun\environment_name()`, `Upsun\environment_type()`, `Upsun\is_production()`, `Upsun\is_preview_environment()`, `Upsun\branch()`, `Upsun\project_id()`, `Upsun\application_name()`, `Upsun\primary_route()`, `Upsun\routes()`, `Upsun\relationship( string $name )`, `Upsun\version()` — all safe to call off-platform.
@@ -261,9 +316,14 @@ wp upsun sanitize --dry-run
 wp upsun sanitize --enable="anonymize-user-emails,anonymize-user-passwords:password-{ID}"
                          # force sanitizers for this run only (project-level policy
                          # when placed in the post_deploy hook); filters still work
+wp upsun vendor <slug>   # export an installed premium plugin/theme as a Composer package
+wp upsun vendor eduma --type=theme --to=private-packages/themes --vendor=keds-theme
+wp upsun vendor --check-updates   # installed plugins/themes with a pending update (flags premium)
+wp upsun vendor learnpress-stripe --update --to=private-packages/plugins   # re-vendor the new version
+wp upsun vendor --update-all --to=private-packages/plugins --dry-run       # preview all resolvable updates
 ```
 
-All commands except `wp upsun cloudflare` print "Not running on Upsun." and exit 0 off-platform. `cloudflare` is host-agnostic (it talks to the Cloudflare API using `CLOUDFLARE_*` credentials), so it also runs from CI or a local shell.
+All commands except `wp upsun cloudflare` and `wp upsun vendor` print "Not running on Upsun." and exit 0 off-platform. `cloudflare` is host-agnostic (it talks to the Cloudflare API using `CLOUDFLARE_*` credentials); `vendor` is a local/onboarding tool that reads installed plugins/themes and writes a package to a writable target, so both also run from CI or a local shell.
 
 ## Development
 
