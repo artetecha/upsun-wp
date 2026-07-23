@@ -593,8 +593,7 @@
           <li><strong>0.4.0</strong> — <code>cloudflare</code> module: edge cache purge (<code>wp upsun cloudflare purge</code>) and an optional origin guard</li>
           <li><strong>0.4.1</strong> — <code>cloudflare</code> fronting detection reworked for Upsun: the router already provides the real client IP, so detect via Cloudflare’s headers and verify rather than rewrite <code>REMOTE_ADDR</code></li>
           <li><strong>0.4.2</strong> — <code>security-headers</code> module: baseline headers on the HTML document (which <code>config.yaml</code> can’t reach), HSTS emitted directly or deferred to Cloudflare when it fronts the request</li>
-          <li><strong>0.4.3</strong> — premium plugin vendoring toolkit: <code>wp upsun vendor</code> exports an installed plugin/theme as a Composer package, and <code>--check-updates</code> flags premium updates Composer won’t catch</li>
-          <li><strong>0.5.0</strong> — programmatic vendored-update fetching: <code>wp upsun vendor --update</code> downloads, extracts, and re-vendors via a pluggable <code>Fetcher</code> registry (built-in <code>TransientFetcher</code>), merging over the upstream <code>composer.json</code>. <strong>Credentials from site state, never env.</strong></li>
+          <li><strong>0.5.0</strong> — premium plugin vendoring toolkit: <code>wp upsun vendor</code> exports an installed plugin/theme as a Composer package, <code>--check-updates</code> flags premium updates Composer won’t catch, and <code>--update</code> re-vendors the new version via a pluggable <code>Fetcher</code> registry (built-in <code>TransientFetcher</code>), merging over the upstream <code>composer.json</code>. <strong>Credentials from site state, never env.</strong></li>
         </ul>
       </div>
       <div class="roadmap-col">

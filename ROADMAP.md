@@ -17,8 +17,7 @@
 | v0.3 | Mount usage visibility (`mount-usage` module) | ✅ shipped in 0.3.4 (PR #54) |
 | v0.4 | Cloudflare front-end support (`cloudflare` module) | ✅ shipped in 0.4.0; reworked in 0.4.1 after live verification (Upsun router already resolves the client IP — detect via CF headers, don't rewrite REMOTE_ADDR) |
 | v0.4 | Security headers (`security-headers` module) | ✅ shipped in 0.4.2 — baseline headers on the HTML document (config.yaml `headers` are static-only), HSTS emitted directly or deferred to Cloudflare when it fronts the request |
-| v0.4 | Premium plugin vendoring toolkit (`wp upsun vendor`) | ✅ shipped in 0.4.3 — `wp upsun vendor <slug>` exports an installed plugin/theme as a Composer package; `--check-updates` + the `vendored_updates` check flag premium updates Composer won't catch |
-| v0.5 | Programmatic vendored-update fetching (`wp upsun vendor --update`) | ✅ shipped in 0.5.0 — a `Fetcher` registry (built-in `TransientFetcher` + per-vendor add-ons) downloads/extracts/re-vendors, merging over the upstream composer.json; credentials come from site state, never env |
+| v0.5 | Premium plugin vendoring toolkit (`wp upsun vendor`) | ✅ shipped in 0.5.0 — `wp upsun vendor <slug>` exports an installed plugin/theme as a Composer package; `--check-updates` + the `vendored_updates` check flag premium updates Composer won't catch; and `--update` re-vendors the new version via a `Fetcher` registry (built-in `TransientFetcher` + per-vendor add-ons) that downloads/extracts/re-vendors, merging over the upstream composer.json — credentials come from site state, never env |
 | — | Extraction to an independent repo | ✅ done — this repo, on Packagist as `artetecha/upsun-wp` |
 
 **v0.3 is complete, and the extraction is done:** the plugin lives in its own
@@ -26,7 +25,7 @@ repository (`github.com/artetecha/upsun-wp`, published on Packagist as
 `artetecha/upsun-wp`, site at `upsun.artetecha.com`) and KEDS consumes it as a
 normal Composer package. **v0.4 opened with the `cloudflare` module (0.4.0)**
 rather than the originally planned vendoring toolkit, which then shipped in
-0.4.3.
+0.5.0.
 
 Each milestone spans point releases (e.g. 0.2.x, 0.3.x, 0.4.x); version =
 package `composer.json` / `UPSUN_MU_PLUGIN_VERSION`.
@@ -374,7 +373,7 @@ production-only, no `includeSubDomains`/`preload`). Site Health and the dashboar
 report which path is active. CSP is deliberately out of scope (inherently
 per-site); the full set is filterable via `upsun_security_headers`.
 
-### Premium plugin vendoring toolkit (`wp upsun vendor`) — shipped in 0.4.3
+### Premium plugin vendoring toolkit (`wp upsun vendor`) — shipped in 0.5.0
 
 Read-only filesystems plus `DISALLOW_FILE_MODS` mean premium plugins cannot
 self-update, so every WP-on-Upsun project reinvents vendoring them as
@@ -401,7 +400,7 @@ daily premium-update PRs). Three layers, two homes:
 
 ### Programmatic vendored-update fetching — shipped in 0.5.0
 
-`wp upsun vendor <slug>` (0.4.3) automates *onboarding* a premium package, and
+`wp upsun vendor <slug>` automates *onboarding* a premium package, and
 `--check-updates` *detects* when one falls behind — but re-vendoring the new
 version is still done by hand or by consumer-specific scripts (KEDS's
 `thim-update.sh` + `premium-update.sh`). Those two scripts are really one

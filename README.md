@@ -347,8 +347,8 @@ Cloudflare in front of the Upsun router (the router already provides the real
 client IP, so the module verifies rather than rewrites it), and the
 `security-headers` module (0.4.2) — baseline response headers on the HTML
 document (which `config.yaml` can't reach), with HSTS emitted directly or
-deferred to Cloudflare when it fronts the request. Most recent: the premium
-plugin vendoring toolkit (`wp upsun vendor`, 0.4.3) and programmatic
-vendored-update fetching (`wp upsun vendor --update` via a pluggable `Fetcher`
-registry, 0.5.0). Router cache purge remains blocked on a platform purge API — though the
+deferred to Cloudflare when it fronts the request. Most recent (0.5.0): the
+premium plugin vendoring toolkit (`wp upsun vendor`) — export, `--check-updates`,
+and programmatic re-vendoring via `--update` through a pluggable `Fetcher`
+registry. Router cache purge remains blocked on a platform purge API — though the
 `cloudflare` module now purges the *edge* cache when Cloudflare fronts the site.
