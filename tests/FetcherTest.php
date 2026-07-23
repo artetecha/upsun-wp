@@ -235,21 +235,90 @@ final class FetcherTest extends TestCase {
 		$this->assertSame( '1.0.0', $plan['to'] );
 	}
 
-	public function test_resolvable_updates_lists_external_pending(): void {
+	public function test_resolvable_updates_excludes_wporg_includes_external(): void {
 		$GLOBALS['upsun_test_site_transients']['update_plugins'] = (object) array(
 			'response' => array(
 				'akismet/akismet.php' => (object) array(
 					'slug' => 'akismet', 'new_version' => '5.9',
 					'package' => 'https://downloads.wordpress.org/plugin/akismet.5.9.zip', 'id' => 'w.org/plugins/akismet',
 				),
+				'learnpress-stripe/learnpress-stripe.php' => (object) array(
+					'slug' => 'learnpress-stripe', 'new_version' => '4.0.7',
+					'package' => 'https://thimpress.com/downloads/stripe.zip',
+				),
 			),
 		);
 
-		// The transient fetcher resolves akismet too (it doesn't care about
-		// wporg vs external — that's the check's classification job), so a
-		// plan exists; this asserts the discovery pass runs without error.
 		$plans = Vendor::resolvable_updates();
 
-		$this->assertIsArray( $plans );
+		// wp.org packages are Composer/wpackagist's job — never re-vendored.
+		$slugs = array_column( $plans, 'slug' );
+		$this->assertContains( 'learnpress-stripe', $slugs );
+		$this->assertNotContains( 'akismet', $slugs );
+	}
+
+	/* Hardening from review: extraction, download, atomicity. */
+
+	public function test_extract_zip_rejects_zip_slip(): void {
+		$zip = $this->dir . '/evil.zip';
+		$this->make_zip( $zip, array(
+			'ok.php'          => '<?php',
+			'../escape.php'   => '<?php // zip-slip',
+		) );
+
+		$this->assertNull( Vendor::extract_zip( $zip, $this->dir . '/out' ) );
+		// Nothing escaped the extraction dir.
+		$this->assertFileDoesNotExist( $this->dir . '/escape.php' );
+	}
+
+	public function test_fetch_zip_refuses_plain_http(): void {
+		$this->assertFalse( Vendor::fetch_zip( 'http://insecure.test/pkg.zip', array(), $this->dir . '/x.zip' ) );
+		$this->assertFileDoesNotExist( $this->dir . '/x.zip' );
+
+		// file:// still works (artifacts / this test path).
+		$src = $this->dir . '/local.zip';
+		$this->make_zip( $src, array( 'a.php' => '<?php' ) );
+		$this->assertTrue( Vendor::fetch_zip( 'file://' . $src, array(), $this->dir . '/copied.zip' ) );
+	}
+
+	public function test_copy_tree_throws_on_failure(): void {
+		// Destination parent is a FILE, so creating the tree there fails.
+		$blocker = $this->dir . '/blocker';
+		file_put_contents( $blocker, 'x' );
+
+		$this->expectException( RuntimeException::class );
+		Vendor::copy_tree( __DIR__, $blocker . '/child' );
+	}
+
+	public function test_update_preserves_existing_package_when_extraction_fails(): void {
+		// Fetcher points at a non-zip file: extraction fails, update() throws,
+		// and the pre-existing vendored package must be untouched.
+		$notzip = $this->dir . '/notazip.bin';
+		file_put_contents( $notzip, 'definitely not a zip' );
+
+		add_filter( 'upsun_vendor_fetchers', static fn ( array $f ) =>
+			array_merge( $f, array( new UpsunFixtureFetcher( 'keepme', '9.9.9', $notzip ) ) )
+		);
+
+		$base = $this->dir . '/pp';
+		mkdir( $base . '/keepme', 0755, true );
+		file_put_contents( $base . '/keepme/composer.json', json_encode( array( 'name' => 'keds-plugin/keepme', 'version' => '1.0.0' ) ) );
+		file_put_contents( $base . '/keepme/keepme.php', '<?php // original' );
+
+		$threw = false;
+		try {
+			Vendor::update( 'keepme', array( 'type' => 'plugin', 'to' => $base ) );
+		} catch ( \Throwable $e ) {
+			$threw = true;
+		}
+
+		$this->assertTrue( $threw, 'update() should throw on a bad archive' );
+		// Old package fully intact, no staging/backup litter left behind.
+		$this->assertFileExists( $base . '/keepme/keepme.php' );
+		$this->assertStringContainsString( 'original', (string) file_get_contents( $base . '/keepme/keepme.php' ) );
+		$this->assertSame(
+			array( 'keepme' ),
+			array_values( array_diff( scandir( $base ) ?: array(), array( '.', '..' ) ) )
+		);
 	}
 }

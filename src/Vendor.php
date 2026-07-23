@@ -141,20 +141,18 @@ final class Vendor {
 	 */
 	public static function copy_tree( string $src, string $dest ): int {
 		if ( is_file( $src ) ) {
-			$dir = dirname( $dest );
-			if ( ! is_dir( $dir ) ) {
-				mkdir( $dir, 0755, true );
+			self::ensure_dir( dirname( $dest ) );
+			if ( ! @copy( $src, $dest ) ) {
+				throw new \RuntimeException( sprintf( 'Failed to copy %s to %s.', $src, $dest ) );
 			}
-			return copy( $src, $dest ) ? 1 : 0;
+			return 1;
 		}
 
 		if ( ! is_dir( $src ) ) {
 			return 0;
 		}
 
-		if ( ! is_dir( $dest ) ) {
-			mkdir( $dest, 0755, true );
-		}
+		self::ensure_dir( $dest );
 
 		$count    = 0;
 		$iterator = new \RecursiveIteratorIterator(
@@ -166,15 +164,25 @@ final class Vendor {
 			$target = $dest . '/' . $iterator->getSubPathName();
 
 			if ( $item->isDir() ) {
-				if ( ! is_dir( $target ) ) {
-					mkdir( $target, 0755, true );
+				self::ensure_dir( $target );
+			} else {
+				self::ensure_dir( dirname( $target ) );
+				// A swallowed copy failure would report a partial tree as
+				// success; fail loudly so callers can roll back instead.
+				if ( ! @copy( $item->getPathname(), $target ) ) {
+					throw new \RuntimeException( sprintf( 'Failed to copy %s.', $item->getPathname() ) );
 				}
-			} elseif ( copy( $item->getPathname(), $target ) ) {
 				$count++;
 			}
 		}
 
 		return $count;
+	}
+
+	private static function ensure_dir( string $dir ): void {
+		if ( ! is_dir( $dir ) && ! @mkdir( $dir, 0755, true ) && ! is_dir( $dir ) ) {
+			throw new \RuntimeException( sprintf( 'Failed to create directory %s.', $dir ) );
+		}
 	}
 
 	/* ---------------------------------------------------------------------
@@ -568,14 +576,20 @@ final class Vendor {
 	 * @param array{type?:string,to?:string,vendor?:string} $opts
 	 * @return array{slug:string,type:string,from:string,to:string,path:string,files:int,fetcher:string}|null
 	 */
-	public static function update( string $slug, array $opts = array() ): ?array {
-		$plan = self::resolve_update( $slug, ( $opts['type'] ?? '' ) ?: null );
+	public static function update( string $slug, array $opts = array(), ?array $plan = null ): ?array {
+		// Accept an already-resolved plan (the CLI computes one for its
+		// dry-run/reporting) so discovery isn't run twice and there is no
+		// resolve-then-re-resolve window.
+		if ( null === $plan ) {
+			$plan = self::resolve_update( $slug, ( $opts['type'] ?? '' ) ?: null );
+		}
 
 		if ( null === $plan ) {
 			return null;
 		}
 
-		$dest = rtrim( '' !== ( $opts['to'] ?? '' ) ? $opts['to'] : '.', '/' ) . '/' . $slug;
+		$dest   = rtrim( '' !== ( $opts['to'] ?? '' ) ? $opts['to'] : '.', '/' ) . '/' . $slug;
+		$parent = dirname( $dest );
 
 		// Preserve the existing vendored package's Composer name (its vendor
 		// namespace) across the update; fall back to <vendor>/<slug>.
@@ -588,19 +602,22 @@ final class Vendor {
 			$name = strtolower( ( ( $opts['vendor'] ?? '' ) ?: 'private' ) . '/' . $slug );
 		}
 
-		$work = self::temp_dir();
+		$work    = self::temp_dir();
+		self::ensure_dir( $parent );
+		$staging = $parent . '/.upsun-vendor-' . uniqid( '', true );
+		$backup  = null;
 
 		try {
 			$zip = $work . '/package.zip';
 
 			if ( ! self::fetch_zip( $plan['url'], $plan['headers'], $zip ) ) {
-				throw new \RuntimeException( sprintf( 'Download failed for %s (%s).', $slug, $plan['fetcher'] ) );
+				throw new \RuntimeException( sprintf( 'Download failed for %s (%s) — is the URL https and licensed?', $slug, $plan['fetcher'] ) );
 			}
 
 			$root = self::extract_zip( $zip, $work . '/src' );
 
 			if ( null === $root ) {
-				throw new \RuntimeException( sprintf( 'Could not extract the %s package.', $slug ) );
+				throw new \RuntimeException( sprintf( 'Could not extract the %s package (empty, unreadable, or unsafe archive).', $slug ) );
 			}
 
 			$upstream = array();
@@ -611,15 +628,37 @@ final class Vendor {
 
 			$composer = self::merge_composer_json( $upstream, $name, $plan['type'], $plan['to'] );
 
-			self::remove_tree( $dest );
-			$files = self::copy_tree( $root, $dest );
+			// Build the complete package in a staging sibling first; the
+			// destination is only ever touched by atomic renames, so a
+			// failure here leaves the existing package fully intact.
+			$files = self::copy_tree( $root, $staging );
 
-			file_put_contents(
-				$dest . '/composer.json',
-				wp_json_encode( $composer, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) . "\n"
-			);
+			$json = wp_json_encode( $composer, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+			if ( false === $json || false === file_put_contents( $staging . '/composer.json', $json . "\n" ) ) {
+				throw new \RuntimeException( sprintf( 'Failed to write composer.json for %s.', $slug ) );
+			}
+
+			// Swap: set the old package aside, move the staged one in, then
+			// drop the backup. On a failed swap, restore the backup.
+			if ( is_dir( $dest ) ) {
+				$backup = $parent . '/.upsun-vendor-old-' . uniqid( '', true );
+				if ( ! @rename( $dest, $backup ) ) {
+					throw new \RuntimeException( sprintf( 'Failed to set aside the existing package at %s.', $dest ) );
+				}
+			}
+
+			if ( ! @rename( $staging, $dest ) ) {
+				if ( null !== $backup ) {
+					@rename( $backup, $dest ); // Restore; leave the old package in place.
+				}
+				throw new \RuntimeException( sprintf( 'Failed to place the vendored package at %s.', $dest ) );
+			}
 		} finally {
 			self::remove_tree( $work );
+			self::remove_tree( $staging ); // No-op once renamed into place.
+			if ( null !== $backup ) {
+				self::remove_tree( $backup ); // No-op if restored or already dropped.
+			}
 		}
 
 		return array(
@@ -644,6 +683,13 @@ final class Vendor {
 		$plans = array();
 
 		foreach ( self::available_updates() as $row ) {
+			// Only premium/external packages are vendored. wordpress.org
+			// updates flow through Composer/wpackagist and must never be
+			// re-vendored (the transient fetcher would happily resolve them).
+			if ( 'external' !== $row['source'] ) {
+				continue;
+			}
+
 			$plan = self::resolve_update( $row['slug'], $row['type'] );
 
 			if ( null !== $plan ) {
@@ -659,12 +705,17 @@ final class Vendor {
 	 * to a destination file.
 	 */
 	public static function fetch_zip( string $url, array $headers, string $dest ): bool {
-		$dir = dirname( $dest );
-		if ( ! is_dir( $dir ) ) {
-			mkdir( $dir, 0755, true );
+		self::ensure_dir( dirname( $dest ) );
+
+		// The download becomes committed, later-executed code and no
+		// checksum/signature is available from these sources, so an http (or
+		// on-path-downgraded) URL is an injection sink: require https for
+		// remote fetches. file:// and local paths are for artifacts/tests.
+		if ( preg_match( '#^http://#i', $url ) ) {
+			return false;
 		}
 
-		if ( preg_match( '#^https?://#i', $url ) ) {
+		if ( preg_match( '#^https://#i', $url ) ) {
 			if ( ! function_exists( 'wp_remote_get' ) ) {
 				return false;
 			}
@@ -686,7 +737,7 @@ final class Vendor {
 
 		$path = preg_replace( '#^file://#', '', $url );
 
-		return is_file( $path ) && copy( $path, $dest );
+		return is_file( $path ) && @copy( $path, $dest );
 	}
 
 	/**
@@ -705,9 +756,29 @@ final class Vendor {
 			return null;
 		}
 
-		if ( ! is_dir( $dest ) ) {
-			mkdir( $dest, 0755, true );
+		// Zip-slip guard: refuse archives with absolute or parent-traversing
+		// entries before extracting anything. libzip mostly sanitizes these,
+		// but the archive is external input, so validate explicitly rather
+		// than rely on version-dependent behavior.
+		for ( $i = 0; $i < $archive->numFiles; $i++ ) {
+			$entry = $archive->getNameIndex( $i );
+
+			if ( false === $entry ) {
+				continue;
+			}
+
+			$normalized = str_replace( '\\', '/', $entry );
+
+			if ( '' !== $normalized
+				&& ( '/' === $normalized[0]
+					|| preg_match( '#^[A-Za-z]:#', $normalized )
+					|| preg_match( '#(^|/)\.\.(/|$)#', $normalized ) ) ) {
+				$archive->close();
+				return null;
+			}
 		}
+
+		self::ensure_dir( $dest );
 
 		$archive->extractTo( $dest );
 		$archive->close();

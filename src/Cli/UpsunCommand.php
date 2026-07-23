@@ -784,16 +784,24 @@ class UpsunCommand {
 		}
 
 		try {
+			// Reuse the plan we just resolved: no second discovery pass, no
+			// resolve-then-re-resolve window.
 			$result = Vendor::update(
 				$slug,
 				array(
 					'type'   => (string) ( $assoc_args['type'] ?? '' ),
 					'to'     => (string) ( $assoc_args['to'] ?? '.' ),
 					'vendor' => (string) ( $assoc_args['vendor'] ?? 'private' ),
-				)
+				),
+				$plan
 			);
 		} catch ( \Throwable $exception ) {
 			WP_CLI::error( $exception->getMessage() );
+		}
+
+		if ( null === $result ) {
+			WP_CLI::success( sprintf( '%s is up to date; nothing was written.', $slug ) );
+			return;
 		}
 
 		WP_CLI::success( sprintf(
@@ -838,7 +846,8 @@ class UpsunCommand {
 						'type'   => $plan['type'],
 						'to'     => (string) ( $assoc_args['to'] ?? '.' ),
 						'vendor' => (string) ( $assoc_args['vendor'] ?? 'private' ),
-					)
+					),
+					$plan
 				);
 			} catch ( \Throwable $exception ) {
 				WP_CLI::warning( sprintf( '%s: %s', $plan['slug'], $exception->getMessage() ) );
