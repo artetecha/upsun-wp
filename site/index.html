@@ -62,7 +62,7 @@
         Off-platform it <strong>fully no-ops</strong> — local dev and CI need no special-casing.
       </p>
       <ul class="badge-row" aria-label="Project facts">
-        <li class="badge badge-version">v0.4.2</li>
+        <li class="badge badge-version">v0.5.0</li>
         <li class="badge">MIT</li>
         <li class="badge">PHP 8.1+</li>
         <li class="badge">WordPress 6.0+</li>
@@ -177,7 +177,7 @@
       </article>
       <article class="principle">
         <h3><span class="principle-num">05</span> Every module unit-tested</h3>
-        <p>PHPUnit against WP stubs — no WordPress install required. Fourteen test suites, one per module or subsystem, on a PHP 8.1→8.4 CI matrix.</p>
+        <p>PHPUnit against WP stubs — no WordPress install required. Nineteen test suites, one per module or subsystem, on a PHP 8.1→8.4 CI matrix.</p>
       </article>
     </div>
   </div>
@@ -374,6 +374,14 @@
         <code class="cli-cmd">wp upsun sanitize</code>
         <p>Fires preview sanitization (refuses on production). <code>--if-needed</code> is stamp-aware and safe on every environment.</p>
       </div>
+      <div class="cli-item" role="listitem">
+        <code class="cli-cmd">wp upsun cloudflare</code>
+        <p>Is Cloudflare fronting this env? <code>purge</code> the edge cache by zone or URL. Host-agnostic — runs anywhere the <code>CLOUDFLARE_*</code> credentials are set.</p>
+      </div>
+      <div class="cli-item" role="listitem">
+        <code class="cli-cmd">wp upsun vendor &lt;slug&gt;</code>
+        <p>Exports a premium plugin/theme as a Composer package. <code>--check-updates</code> flags pending premium updates; <code>--update</code> re-vendors the new version in place.</p>
+      </div>
     </div>
   </div>
 </section>
@@ -383,7 +391,7 @@
   <div class="container">
     <header class="section-head reveal">
       <p class="section-kicker">Plays well with others</p>
-      <h2>Integrations, sanitizers, migrations.</h2>
+      <h2>Integrations, sanitizers, migrations, vendoring.</h2>
     </header>
     <div class="eco-grid reveal">
       <article class="eco-col">
@@ -434,6 +442,26 @@
           the deploy before traffic switches.
         </p>
       </article>
+      <article class="eco-col">
+        <h3>Vendoring premium plugins</h3>
+        <p>
+          A read-only filesystem means premium plugins can’t self-update — so they’re vendored as
+          Composer path packages. <code>wp upsun vendor &lt;slug&gt;</code> does the mechanical
+          onboarding: it reads the installed header and writes a ready-to-commit package with a
+          generated <code>composer.json</code> alongside the source.
+        </p>
+        <ul class="mini-list">
+          <li><code>vendor &lt;slug&gt;</code> — export an installed plugin/theme as a package</li>
+          <li><code>vendor --check-updates</code> — pending updates, flagged <code>wporg</code> vs <code>external</code></li>
+          <li><code>vendor &lt;slug&gt; --update</code> — re-vendor the new version in place</li>
+        </ul>
+        <p class="eco-note">
+          New in <strong>0.5.0</strong>: <code>--update</code> uses a pluggable <strong>fetcher</strong>
+          registry (built-in <code>TransientFetcher</code>) to download, extract, and re-vendor —
+          merging over the upstream <code>composer.json</code>. Credentials come from the site’s own
+          state, never from env or config.
+        </p>
+      </article>
     </div>
   </div>
 </section>
@@ -457,7 +485,7 @@
           <span class="code-lang">composer.json</span>
           <pre><code>{
   <span class="tok-k">"require"</span>: {
-    <span class="tok-s">"artetecha/upsun-wp"</span>: <span class="tok-s">"^0.3"</span>
+    <span class="tok-s">"artetecha/upsun-wp"</span>: <span class="tok-s">"^0.5"</span>
   },
   <span class="tok-k">"extra"</span>: {
     <span class="tok-k">"installer-paths"</span>: {
@@ -565,12 +593,12 @@
           <li><strong>0.4.0</strong> — <code>cloudflare</code> module: edge cache purge (<code>wp upsun cloudflare purge</code>) and an optional origin guard</li>
           <li><strong>0.4.1</strong> — <code>cloudflare</code> fronting detection reworked for Upsun: the router already provides the real client IP, so detect via Cloudflare’s headers and verify rather than rewrite <code>REMOTE_ADDR</code></li>
           <li><strong>0.4.2</strong> — <code>security-headers</code> module: baseline headers on the HTML document (which <code>config.yaml</code> can’t reach), HSTS emitted directly or deferred to Cloudflare when it fronts the request</li>
+          <li><strong>0.5.0</strong> — premium plugin vendoring toolkit: <code>wp upsun vendor</code> exports an installed plugin/theme as a Composer package, <code>--check-updates</code> flags premium updates Composer won’t catch, and <code>--update</code> re-vendors the new version via a pluggable <code>Fetcher</code> registry (built-in <code>TransientFetcher</code>), merging over the upstream <code>composer.json</code>. <strong>Credentials from site state, never env.</strong></li>
         </ul>
       </div>
       <div class="roadmap-col">
         <h3><span class="dot dot-plan"></span> Planned</h3>
         <ul class="roadmap-list">
-          <li><strong>v0.4.x</strong> — premium plugin vendoring toolkit: <code>wp upsun vendor</code> exports installed premium plugins as Composer-ready packages, and reports their pending updates (the original 0.4.0 target, now that the <code>cloudflare</code> module shipped first)</li>
           <li>Elasticsearch / OpenSearch → ElasticPress auto-wiring — deferred until a consumer runs a search service</li>
         </ul>
       </div>

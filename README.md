@@ -6,7 +6,7 @@ Platform integration for WordPress running on [Upsun](https://upsun.com): enviro
 
 The plugin detects Upsun at runtime (`PLATFORM_APPLICATION_NAME` + `PLATFORM_ENVIRONMENT`) and **fully no-ops anywhere else** — local development and CI need no special-casing. It reads platform variables directly and never defines WordPress configuration constants: your `wp-config.php` stays the single owner of database credentials, URLs, salts, and `WP_ENVIRONMENT_TYPE`.
 
-This is a generic plugin for any WordPress project on Upsun; site-specific behavior belongs in the consuming project via the filters below — never in this package. It was built for, and is battle-tested by, its first customer: a production LMS/commerce site consuming it exclusively through the public filter/constant API. A companion starter repository — a deploy-ready Composer WordPress on Upsun, pre-wired for this plugin — is on its way.
+This is a generic plugin for any WordPress project on Upsun; site-specific behavior belongs in the consuming project via the filters below — never in this package. It was built for, and is battle-tested by, its first customer: a production LMS/commerce site consuming it exclusively through the public filter/constant API. A companion [starter repository](https://github.com/artetecha/wordpress-upsun-starter) — a deploy-ready Composer WordPress on Upsun, pre-wired for this plugin — is live.
 
 ## Installation (Composer-managed WordPress)
 
@@ -19,7 +19,7 @@ loader shim), and wire the post_deploy hook.
 // composer.json
 {
   "require": {
-    "artetecha/upsun-wp": "^0.3"
+    "artetecha/upsun-wp": "^0.5"
   }
 }
 ```
@@ -347,7 +347,8 @@ Cloudflare in front of the Upsun router (the router already provides the real
 client IP, so the module verifies rather than rewrites it), and the
 `security-headers` module (0.4.2) — baseline response headers on the HTML
 document (which `config.yaml` can't reach), with HSTS emitted directly or
-deferred to Cloudflare when it fronts the request. Next up in v0.4: the
-premium plugin vendoring toolkit (`wp upsun vendor`).
-Router cache purge remains blocked on a platform purge API — though the
+deferred to Cloudflare when it fronts the request. Most recent (0.5.0): the
+premium plugin vendoring toolkit (`wp upsun vendor`) — export, `--check-updates`,
+and programmatic re-vendoring via `--update` through a pluggable `Fetcher`
+registry. Router cache purge remains blocked on a platform purge API — though the
 `cloudflare` module now purges the *edge* cache when Cloudflare fronts the site.
