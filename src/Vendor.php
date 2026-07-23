@@ -431,4 +431,322 @@ final class Vendor {
 	private static function clean( $value ): string {
 		return trim( preg_replace( '/\s+/', ' ', strip_tags( (string) $value ) ) );
 	}
+
+	/* ---------------------------------------------------------------------
+	 * Update fetching (v0.5). The engine: dispatch to a Fetcher for
+	 * discovery, then download / extract / re-vendor. Fetchers supply only
+	 * the authenticated download; everything else is here and generic.
+	 * ------------------------------------------------------------------- */
+
+	/**
+	 * Registered fetchers, most specific first, with the built-in
+	 * TransientFetcher appended as the universal fallback.
+	 *
+	 * @return Fetcher[]
+	 */
+	public static function fetchers(): array {
+		/**
+		 * Filters the vendored-update fetcher list. Register vendor-specific
+		 * fetchers (e.g. a ThimPress fetcher gated on thim-core); the first
+		 * whose supports() matches wins. The built-in transient fetcher is
+		 * always tried last.
+		 *
+		 * @param Fetcher[] $fetchers
+		 */
+		$fetchers = (array) apply_filters( 'upsun_vendor_fetchers', array() );
+
+		$fetchers   = array_values( array_filter( $fetchers, static fn ( $f ) => $f instanceof Fetcher ) );
+		$fetchers[] = new Fetchers\TransientFetcher();
+
+		return $fetchers;
+	}
+
+	/**
+	 * The first fetcher that supports the package.
+	 */
+	public static function pick_fetcher( string $slug, string $type ): ?Fetcher {
+		foreach ( self::fetchers() as $fetcher ) {
+			if ( $fetcher->supports( $slug, $type ) ) {
+				return $fetcher;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Re-vendor manifest: merge our pin fields over the upstream
+	 * composer.json (from the new version's source), stripping keys that
+	 * would leak into the consumer's dependency resolution or autoloading.
+	 * Everything else upstream ships — notably `extra` — is preserved,
+	 * because some plugins read it at runtime (e.g. fluentcampaign-pro's
+	 * extra.wpfluent.namespace). Pure.
+	 *
+	 * @param array<string,mixed> $upstream Decoded upstream composer.json (or empty).
+	 * @return array<string,mixed>
+	 */
+	public static function merge_composer_json( array $upstream, string $name, string $type, string $version ): array {
+		$strip = array(
+			'require',
+			'require-dev',
+			'repositories',
+			'scripts',
+			'config',
+			'autoload',
+			'autoload-dev',
+			'minimum-stability',
+			'prefer-stable',
+			'provide',
+			'replace',
+			'conflict',
+			'suggest',
+			'bin',
+		);
+
+		foreach ( $strip as $key ) {
+			unset( $upstream[ $key ] );
+		}
+
+		$upstream['name'] = strtolower( $name );
+		$upstream['type'] = 'wordpress-' . ( 'theme' === $type ? 'theme' : 'plugin' );
+
+		if ( '' !== $version ) {
+			$upstream['version'] = $version;
+		}
+
+		return $upstream;
+	}
+
+	/**
+	 * Discovery only (no download): what a re-vendor of this slug would do.
+	 * Returns null when there is no newer version to fetch.
+	 *
+	 * @return array{slug:string,type:string,from:string,to:string,url:string,headers:array,fetcher:string}|null
+	 */
+	public static function resolve_update( string $slug, ?string $type = null ): ?array {
+		$type = in_array( $type, array( 'plugin', 'theme' ), true ) ? $type : self::detect_type( $slug );
+
+		if ( null === $type ) {
+			return null;
+		}
+
+		$fetcher = self::pick_fetcher( $slug, $type );
+
+		if ( null === $fetcher ) {
+			return null;
+		}
+
+		$update = $fetcher->available_update( $slug, $type );
+
+		if ( ! is_array( $update ) || empty( $update['url'] ) || empty( $update['version'] ) ) {
+			return null;
+		}
+
+		$current = self::installed_version( $slug, $type );
+
+		// Only act on a strictly newer version (the transient only lists
+		// pending updates, but a custom fetcher might not).
+		if ( '' !== $current && version_compare( $update['version'], $current, '<=' ) ) {
+			return null;
+		}
+
+		return array(
+			'slug'    => $slug,
+			'type'    => $type,
+			'from'    => $current,
+			'to'      => (string) $update['version'],
+			'url'     => (string) $update['url'],
+			'headers' => (array) ( $update['headers'] ?? array() ),
+			'fetcher' => $fetcher->id(),
+		);
+	}
+
+	/**
+	 * Fetch and re-vendor a pending update into <to>/<slug>/. Throws on any
+	 * failure. Returns null when there is nothing newer to fetch.
+	 *
+	 * @param array{type?:string,to?:string,vendor?:string} $opts
+	 * @return array{slug:string,type:string,from:string,to:string,path:string,files:int,fetcher:string}|null
+	 */
+	public static function update( string $slug, array $opts = array() ): ?array {
+		$plan = self::resolve_update( $slug, ( $opts['type'] ?? '' ) ?: null );
+
+		if ( null === $plan ) {
+			return null;
+		}
+
+		$dest = rtrim( '' !== ( $opts['to'] ?? '' ) ? $opts['to'] : '.', '/' ) . '/' . $slug;
+
+		// Preserve the existing vendored package's Composer name (its vendor
+		// namespace) across the update; fall back to <vendor>/<slug>.
+		$name = '';
+		if ( is_file( $dest . '/composer.json' ) ) {
+			$existing = json_decode( (string) file_get_contents( $dest . '/composer.json' ), true );
+			$name     = is_array( $existing ) ? (string) ( $existing['name'] ?? '' ) : '';
+		}
+		if ( '' === $name ) {
+			$name = strtolower( ( ( $opts['vendor'] ?? '' ) ?: 'private' ) . '/' . $slug );
+		}
+
+		$work = self::temp_dir();
+
+		try {
+			$zip = $work . '/package.zip';
+
+			if ( ! self::fetch_zip( $plan['url'], $plan['headers'], $zip ) ) {
+				throw new \RuntimeException( sprintf( 'Download failed for %s (%s).', $slug, $plan['fetcher'] ) );
+			}
+
+			$root = self::extract_zip( $zip, $work . '/src' );
+
+			if ( null === $root ) {
+				throw new \RuntimeException( sprintf( 'Could not extract the %s package.', $slug ) );
+			}
+
+			$upstream = array();
+			if ( is_file( $root . '/composer.json' ) ) {
+				$decoded  = json_decode( (string) file_get_contents( $root . '/composer.json' ), true );
+				$upstream = is_array( $decoded ) ? $decoded : array();
+			}
+
+			$composer = self::merge_composer_json( $upstream, $name, $plan['type'], $plan['to'] );
+
+			self::remove_tree( $dest );
+			$files = self::copy_tree( $root, $dest );
+
+			file_put_contents(
+				$dest . '/composer.json',
+				wp_json_encode( $composer, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) . "\n"
+			);
+		} finally {
+			self::remove_tree( $work );
+		}
+
+		return array(
+			'slug'    => $slug,
+			'type'    => $plan['type'],
+			'from'    => $plan['from'],
+			'to'      => $plan['to'],
+			'path'    => $dest,
+			'files'   => $files,
+			'fetcher' => $plan['fetcher'],
+		);
+	}
+
+	/**
+	 * Every installed plugin/theme with a pending update a fetcher can
+	 * resolve — the discovery pass behind --update-all and --check-updates
+	 * for premium packages.
+	 *
+	 * @return array<int, array{slug:string,type:string,from:string,to:string,url:string,headers:array,fetcher:string}>
+	 */
+	public static function resolvable_updates(): array {
+		$plans = array();
+
+		foreach ( self::available_updates() as $row ) {
+			$plan = self::resolve_update( $row['slug'], $row['type'] );
+
+			if ( null !== $plan ) {
+				$plans[] = $plan;
+			}
+		}
+
+		return $plans;
+	}
+
+	/**
+	 * Download a URL (or copy a local/file:// path, for artifacts and tests)
+	 * to a destination file.
+	 */
+	public static function fetch_zip( string $url, array $headers, string $dest ): bool {
+		$dir = dirname( $dest );
+		if ( ! is_dir( $dir ) ) {
+			mkdir( $dir, 0755, true );
+		}
+
+		if ( preg_match( '#^https?://#i', $url ) ) {
+			if ( ! function_exists( 'wp_remote_get' ) ) {
+				return false;
+			}
+
+			$response = wp_remote_get(
+				$url,
+				array(
+					'timeout'  => 120,
+					'headers'  => $headers,
+					'stream'   => true,
+					'filename' => $dest,
+				)
+			);
+
+			return ! is_wp_error( $response )
+				&& (int) wp_remote_retrieve_response_code( $response ) < 400
+				&& is_file( $dest );
+		}
+
+		$path = preg_replace( '#^file://#', '', $url );
+
+		return is_file( $path ) && copy( $path, $dest );
+	}
+
+	/**
+	 * Extract a zip and return the directory to vendor from — the single
+	 * top-level directory the archive wraps its files in, if any, else the
+	 * extraction root. Null on failure.
+	 */
+	public static function extract_zip( string $zip, string $dest ): ?string {
+		if ( ! class_exists( '\ZipArchive' ) ) {
+			return null;
+		}
+
+		$archive = new \ZipArchive();
+
+		if ( true !== $archive->open( $zip ) ) {
+			return null;
+		}
+
+		if ( ! is_dir( $dest ) ) {
+			mkdir( $dest, 0755, true );
+		}
+
+		$archive->extractTo( $dest );
+		$archive->close();
+
+		$entries = array_values( array_diff( scandir( $dest ) ?: array(), array( '.', '..' ) ) );
+
+		// A single wrapping directory (plugin-name/…) is the vendor root.
+		if ( 1 === count( $entries ) && is_dir( $dest . '/' . $entries[0] ) ) {
+			return $dest . '/' . $entries[0];
+		}
+
+		return $dest;
+	}
+
+	/**
+	 * Recursively delete a path (used to replace a package on re-vendor and
+	 * to clean the work directory).
+	 */
+	public static function remove_tree( string $path ): void {
+		if ( is_file( $path ) || is_link( $path ) ) {
+			unlink( $path );
+			return;
+		}
+
+		if ( ! is_dir( $path ) ) {
+			return;
+		}
+
+		foreach ( array_diff( scandir( $path ) ?: array(), array( '.', '..' ) ) as $item ) {
+			self::remove_tree( $path . '/' . $item );
+		}
+
+		rmdir( $path );
+	}
+
+	private static function temp_dir(): string {
+		$dir = rtrim( sys_get_temp_dir(), '/' ) . '/upsun-vendor-' . uniqid( '', true );
+		mkdir( $dir, 0755, true );
+
+		return $dir;
+	}
 }

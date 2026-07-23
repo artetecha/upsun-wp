@@ -268,6 +268,8 @@ require_once dirname( __DIR__ ) . '/src/Sanitizers.php';
 require_once dirname( __DIR__ ) . '/src/Migrations.php';
 require_once dirname( __DIR__ ) . '/src/RelationshipHealth.php';
 require_once dirname( __DIR__ ) . '/src/Vendor.php';
+require_once dirname( __DIR__ ) . '/src/Fetcher.php';
+require_once dirname( __DIR__ ) . '/src/Fetchers/TransientFetcher.php';
 require_once dirname( __DIR__ ) . '/src/Module.php';
 require_once dirname( __DIR__ ) . '/src/ModuleRegistry.php';
 require_once dirname( __DIR__ ) . '/src/Integration.php';
