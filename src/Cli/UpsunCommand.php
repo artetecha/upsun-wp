@@ -650,6 +650,20 @@ class UpsunCommand {
 	 * [--check-updates]
 	 * : List installed plugins/themes with a pending update instead of exporting, flagging premium/external ones.
 	 *
+	 * [--update]
+	 * : Re-vendor <slug> to a newer version: a fetcher resolves the
+	 * authenticated download (from site state, never env), then the package
+	 * is downloaded, extracted, and re-vendored into <to>/<slug>/ with its
+	 * composer.json merged over the upstream one. Runs where the activated
+	 * DB lives (container/local) and writes to a writable --to.
+	 *
+	 * [--update-all]
+	 * : Re-vendor every installed package with a resolvable pending update.
+	 * Suits a flat --to; split plugin/theme layouts loop --update per slug.
+	 *
+	 * [--dry-run]
+	 * : With --update/--update-all, report what would change without writing.
+	 *
 	 * [--format=<format>]
 	 * : Render --check-updates output in a particular format.
 	 * ---
@@ -666,6 +680,8 @@ class UpsunCommand {
 	 *     wp upsun vendor learnpress-stripe
 	 *     wp upsun vendor eduma --type=theme --to=private-packages/themes --vendor=keds-theme
 	 *     wp upsun vendor --check-updates
+	 *     wp upsun vendor learnpress-stripe --update --to=private-packages/plugins
+	 *     wp upsun vendor --update-all --to=private-packages/plugins --dry-run
 	 */
 	public function vendor( $args, $assoc_args ) {
 		if ( ! empty( $assoc_args['check-updates'] ) ) {
@@ -696,17 +712,29 @@ class UpsunCommand {
 			}
 
 			WP_CLI::warning( sprintf(
-				'%d premium/external update(s) pending — Composer will not catch these; re-vendor with "wp upsun vendor <slug>": %s',
+				'%d premium/external update(s) pending — Composer will not catch these; re-vendor with "wp upsun vendor <slug> --update": %s',
 				count( $external ),
 				implode( ', ', array_map( static fn ( array $r ) => $r['slug'], $external ) )
 			) );
 			return;
 		}
 
+		$dry_run = ! empty( $assoc_args['dry-run'] );
+
+		if ( ! empty( $assoc_args['update-all'] ) ) {
+			$this->vendor_update_all( $assoc_args, $dry_run );
+			return;
+		}
+
+		if ( ! empty( $assoc_args['update'] ) ) {
+			$this->vendor_update( (string) ( $args[0] ?? '' ), $assoc_args, $dry_run );
+			return;
+		}
+
 		$slug = (string) ( $args[0] ?? '' );
 
 		if ( '' === $slug ) {
-			WP_CLI::error( 'Provide a plugin or theme slug to vendor, or use --check-updates.' );
+			WP_CLI::error( 'Provide a plugin or theme slug to vendor, or use --check-updates / --update-all.' );
 		}
 
 		try {
@@ -733,6 +761,106 @@ class UpsunCommand {
 			$result['files'],
 			$result['name']
 		) );
+	}
+
+	/**
+	 * Re-vendor a single package to a newer version (the --update path).
+	 */
+	private function vendor_update( string $slug, array $assoc_args, bool $dry_run ): void {
+		if ( '' === $slug ) {
+			WP_CLI::error( 'Provide a plugin or theme slug to update, or use --update-all.' );
+		}
+
+		$plan = Vendor::resolve_update( $slug, ( $assoc_args['type'] ?? '' ) ?: null );
+
+		if ( null === $plan ) {
+			WP_CLI::success( sprintf( '%s is up to date (or no fetcher can resolve an update).', $slug ) );
+			return;
+		}
+
+		if ( $dry_run ) {
+			WP_CLI::log( sprintf( 'Would update %s: %s → %s via %s.', $plan['slug'], $plan['from'] ?: '?', $plan['to'], $plan['fetcher'] ) );
+			return;
+		}
+
+		try {
+			// Reuse the plan we just resolved: no second discovery pass, no
+			// resolve-then-re-resolve window.
+			$result = Vendor::update(
+				$slug,
+				array(
+					'type'   => (string) ( $assoc_args['type'] ?? '' ),
+					'to'     => (string) ( $assoc_args['to'] ?? '.' ),
+					'vendor' => (string) ( $assoc_args['vendor'] ?? 'private' ),
+				),
+				$plan
+			);
+		} catch ( \Throwable $exception ) {
+			WP_CLI::error( $exception->getMessage() );
+		}
+
+		if ( null === $result ) {
+			WP_CLI::success( sprintf( '%s is up to date; nothing was written.', $slug ) );
+			return;
+		}
+
+		WP_CLI::success( sprintf(
+			'Updated %s: %s → %s via %s → %s (%d files). Review the diff and commit.',
+			$result['slug'],
+			$result['from'] ?: '?',
+			$result['to'],
+			$result['fetcher'],
+			$result['path'],
+			$result['files']
+		) );
+	}
+
+	/**
+	 * Re-vendor every package with a resolvable pending update (the
+	 * --update-all path). Suits a flat target; split plugin/theme layouts
+	 * loop `--update <slug>` per package (as KEDS's per-package PR flow does).
+	 */
+	private function vendor_update_all( array $assoc_args, bool $dry_run ): void {
+		$plans = Vendor::resolvable_updates();
+
+		if ( array() === $plans ) {
+			WP_CLI::success( 'Nothing to update — no resolvable pending updates.' );
+			return;
+		}
+
+		if ( $dry_run ) {
+			foreach ( $plans as $plan ) {
+				WP_CLI::log( sprintf( 'Would update %s (%s): %s → %s via %s.', $plan['slug'], $plan['type'], $plan['from'] ?: '?', $plan['to'], $plan['fetcher'] ) );
+			}
+			WP_CLI::log( sprintf( '%d package(s) would be updated.', count( $plans ) ) );
+			return;
+		}
+
+		$updated = 0;
+
+		foreach ( $plans as $plan ) {
+			try {
+				$result = Vendor::update(
+					$plan['slug'],
+					array(
+						'type'   => $plan['type'],
+						'to'     => (string) ( $assoc_args['to'] ?? '.' ),
+						'vendor' => (string) ( $assoc_args['vendor'] ?? 'private' ),
+					),
+					$plan
+				);
+			} catch ( \Throwable $exception ) {
+				WP_CLI::warning( sprintf( '%s: %s', $plan['slug'], $exception->getMessage() ) );
+				continue;
+			}
+
+			if ( null !== $result ) {
+				++$updated;
+				WP_CLI::log( sprintf( 'Updated %s: %s → %s (%d files).', $result['slug'], $result['from'] ?: '?', $result['to'], $result['files'] ) );
+			}
+		}
+
+		WP_CLI::success( sprintf( 'Updated %d of %d package(s). Review the diff and commit.', $updated, count( $plans ) ) );
 	}
 
 	/**

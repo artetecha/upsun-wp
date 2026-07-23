@@ -18,6 +18,7 @@
 | v0.4 | Cloudflare front-end support (`cloudflare` module) | ✅ shipped in 0.4.0; reworked in 0.4.1 after live verification (Upsun router already resolves the client IP — detect via CF headers, don't rewrite REMOTE_ADDR) |
 | v0.4 | Security headers (`security-headers` module) | ✅ shipped in 0.4.2 — baseline headers on the HTML document (config.yaml `headers` are static-only), HSTS emitted directly or deferred to Cloudflare when it fronts the request |
 | v0.4 | Premium plugin vendoring toolkit (`wp upsun vendor`) | ✅ shipped in 0.4.3 — `wp upsun vendor <slug>` exports an installed plugin/theme as a Composer package; `--check-updates` + the `vendored_updates` check flag premium updates Composer won't catch |
+| v0.5 | Programmatic vendored-update fetching (`wp upsun vendor --update`) | ✅ shipped in 0.5.0 — a `Fetcher` registry (built-in `TransientFetcher` + per-vendor add-ons) downloads/extracts/re-vendors, merging over the upstream composer.json; credentials come from site state, never env |
 | — | Extraction to an independent repo | ✅ done — this repo, on Packagist as `artetecha/upsun-wp` |
 
 **v0.3 is complete, and the extraction is done:** the plugin lives in its own
@@ -398,7 +399,7 @@ daily premium-update PRs). Three layers, two homes:
   below. Only each vendor's *discovery call* stays specific, as a registered
   fetcher add-on.
 
-### Programmatic vendored-update fetching (v0.5)
+### Programmatic vendored-update fetching — shipped in 0.5.0
 
 `wp upsun vendor <slug>` (0.4.3) automates *onboarding* a premium package, and
 `--check-updates` *detects* when one falls behind — but re-vendoring the new
@@ -406,7 +407,9 @@ version is still done by hand or by consumer-specific scripts (KEDS's
 `thim-update.sh` + `premium-update.sh`). Those two scripts are really one
 generic case plus one exception, so the fetching harness generalizes, with
 per-vendor add-ons for the single question that does not: *how do I find the
-authenticated download for this package?*
+authenticated download for this package?* Shipped in 0.5.0 with the built-in
+`TransientFetcher`; vendor-specific fetchers (e.g. ThimPress) register via
+`upsun_vendor_fetchers`.
 
 Shape — mirrors the Integrations registry:
 
