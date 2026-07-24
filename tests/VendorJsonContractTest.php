@@ -14,7 +14,7 @@ final class VendorJsonContractTest extends TestCase {
 
 	private function reduce( string $method, array $arg ): array {
 		// Reflection can invoke private methods directly since PHP 8.1 (the
-		// plugin requires >= 8.2), so no setAccessible() is needed.
+		// plugin's floor), so no setAccessible() is needed.
 		$m = new ReflectionMethod( \Upsun\Cli\UpsunCommand::class, $method );
 
 		return (array) $m->invoke( null, $arg );

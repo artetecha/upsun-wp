@@ -62,7 +62,7 @@
         Off-platform it <strong>fully no-ops</strong> — local dev and CI need no special-casing.
       </p>
       <ul class="badge-row" aria-label="Project facts">
-        <li class="badge badge-version">v0.5.0</li>
+        <li class="badge badge-version">v0.6.0</li>
         <li class="badge">MIT</li>
         <li class="badge">PHP 8.1+</li>
         <li class="badge">WordPress 6.0+</li>
@@ -456,10 +456,16 @@
           <li><code>vendor &lt;slug&gt; --update</code> — re-vendor the new version in place</li>
         </ul>
         <p class="eco-note">
-          New in <strong>0.5.0</strong>: <code>--update</code> uses a pluggable <strong>fetcher</strong>
-          registry (built-in <code>TransientFetcher</code>) to download, extract, and re-vendor —
-          merging over the upstream <code>composer.json</code>. Credentials come from the site’s own
-          state, never from env or config.
+          <code>--update</code> uses a pluggable <strong>fetcher</strong> registry to download,
+          extract, and re-vendor — merging over the upstream <code>composer.json</code>. Credentials
+          come from the site’s own state, never from env or config.
+        </p>
+        <p class="eco-note">
+          New in <strong>0.6.0</strong>: a built-in <code>ThimPressFetcher</code> (Eduma, thim-core,
+          LearnPress add-ons) — conditionally active like the integrations, off without thim-core;
+          a <code>--dry-run --format=json</code> resolve contract for CI (the token is never emitted);
+          and a <code>vendor_fetchers</code> report in <code>wp upsun doctor</code>, Site Health, and
+          the dashboard.
         </p>
       </article>
     </div>
@@ -485,7 +491,7 @@
           <span class="code-lang">composer.json</span>
           <pre><code>{
   <span class="tok-k">"require"</span>: {
-    <span class="tok-s">"artetecha/upsun-wp"</span>: <span class="tok-s">"^0.5"</span>
+    <span class="tok-s">"artetecha/upsun-wp"</span>: <span class="tok-s">"^0.6"</span>
   },
   <span class="tok-k">"extra"</span>: {
     <span class="tok-k">"installer-paths"</span>: {
@@ -594,6 +600,7 @@
           <li><strong>0.4.1</strong> — <code>cloudflare</code> fronting detection reworked for Upsun: the router already provides the real client IP, so detect via Cloudflare’s headers and verify rather than rewrite <code>REMOTE_ADDR</code></li>
           <li><strong>0.4.2</strong> — <code>security-headers</code> module: baseline headers on the HTML document (which <code>config.yaml</code> can’t reach), HSTS emitted directly or deferred to Cloudflare when it fronts the request</li>
           <li><strong>0.5.0</strong> — premium plugin vendoring toolkit: <code>wp upsun vendor</code> exports an installed plugin/theme as a Composer package, <code>--check-updates</code> flags premium updates Composer won’t catch, and <code>--update</code> re-vendors the new version via a pluggable <code>Fetcher</code> registry (built-in <code>TransientFetcher</code>), merging over the upstream <code>composer.json</code>. <strong>Credentials from site state, never env.</strong></li>
+          <li><strong>0.6.0</strong> — built-in <code>ThimPressFetcher</code> (Eduma, thim-core, LearnPress add-ons), conditionally active like the integrations; a <code>--dry-run --format=json</code> resolve contract for CI (the download token is never emitted); and a <code>vendor_fetchers</code> report in <code>wp upsun doctor</code>, Site Health, and the dashboard</li>
         </ul>
       </div>
       <div class="roadmap-col">
