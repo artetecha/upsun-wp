@@ -14,12 +14,21 @@
 namespace Upsun\Fetchers;
 
 use Upsun\Fetcher;
+use Upsun\FetcherStatus;
 use Upsun\Vendor;
 
-class TransientFetcher implements Fetcher {
+class TransientFetcher implements Fetcher, FetcherStatus {
 
 	public function id(): string {
 		return 'transient';
+	}
+
+	public function label(): string {
+		return 'WordPress update transients';
+	}
+
+	public function is_available(): bool {
+		return true; // The universal fallback is always available.
 	}
 
 	public function supports( string $slug, string $type ): bool {

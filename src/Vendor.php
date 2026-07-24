@@ -463,10 +463,86 @@ final class Vendor {
 		 */
 		$fetchers = (array) apply_filters( 'upsun_vendor_fetchers', array() );
 
-		$fetchers   = array_values( array_filter( $fetchers, static fn ( $f ) => $f instanceof Fetcher ) );
+		$fetchers = array_values( array_filter( $fetchers, static fn ( $f ) => $f instanceof Fetcher ) );
+
+		// Built-in, conditionally-active fetchers, before the universal
+		// fallback. Each no-ops via supports() when its backing source is
+		// absent (so it's inert off its target), and can be turned off with
+		// UPSUN_DISABLE_FETCHER_<ID> — mirroring the integrations convention.
+		if ( ! self::fetcher_disabled( 'thimpress' ) ) {
+			$fetchers[] = new Fetchers\ThimPressFetcher();
+		}
+
 		$fetchers[] = new Fetchers\TransientFetcher();
 
 		return $fetchers;
+	}
+
+	/**
+	 * e.g. 'thimpress' => UPSUN_DISABLE_FETCHER_THIMPRESS.
+	 */
+	public static function fetcher_disable_constant_name( string $id ): string {
+		return 'UPSUN_DISABLE_FETCHER_' . strtoupper( str_replace( '-', '_', $id ) );
+	}
+
+	private static function fetcher_disabled( string $id ): bool {
+		$const = self::fetcher_disable_constant_name( $id );
+
+		return defined( $const ) && constant( $const );
+	}
+
+	/**
+	 * Reporting view of the active fetchers, in dispatch (priority) order,
+	 * for `wp upsun doctor`, Site Health, and the dashboard. A fetcher that
+	 * implements FetcherStatus supplies its own label/availability; others
+	 * are reported under their id() and assumed available.
+	 *
+	 * @return array<int, array{id:string,label:string,available:bool}>
+	 */
+	public static function fetcher_status(): array {
+		$out = array();
+
+		foreach ( self::fetchers() as $fetcher ) {
+			$reports = $fetcher instanceof FetcherStatus;
+
+			$out[] = array(
+				'id'        => $fetcher->id(),
+				'label'     => $reports ? $fetcher->label() : $fetcher->id(),
+				'available' => $reports ? $fetcher->is_available() : true,
+			);
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Shared health check: report which vendored-update fetchers are active,
+	 * in priority order. Informational (always pass) — it describes the
+	 * resolve capability, not a problem to fix.
+	 *
+	 * @return array{status:string, message:string}
+	 */
+	public static function check_fetchers(): array {
+		$parts = array();
+
+		foreach ( self::fetcher_status() as $fetcher ) {
+			$parts[] = sprintf(
+				'%s (%s)',
+				$fetcher['id'],
+				$fetcher['available']
+					? __( 'active', 'upsun-mu-plugin' )
+					: __( 'inactive — backing source not detected', 'upsun-mu-plugin' )
+			);
+		}
+
+		return array(
+			'status'  => 'pass',
+			'message' => sprintf(
+				/* translators: %s: comma-separated list of "id (state)", first match wins. */
+				__( 'Vendored-update fetchers, first match wins: %s.', 'upsun-mu-plugin' ),
+				implode( ', ', $parts )
+			),
+		);
 	}
 
 	/**

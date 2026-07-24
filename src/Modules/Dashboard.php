@@ -537,6 +537,43 @@ class Dashboard implements Module {
 		echo '</tbody></table>';
 
 		$this->render_integrations();
+		$this->render_fetchers();
+	}
+
+	/**
+	 * Vendored-update fetchers: the resolve strategies `wp upsun vendor`
+	 * tries, in priority order (first match wins), and whether each one's
+	 * backing source is present on this environment.
+	 */
+	private function render_fetchers(): void {
+		$status = \Upsun\Vendor::fetcher_status();
+
+		if ( array() === $status ) {
+			return;
+		}
+
+		echo '<h3>' . esc_html__( 'Vendor fetchers', 'upsun-mu-plugin' ) . '</h3>';
+		echo '<table class="widefat striped"><thead><tr>';
+
+		foreach ( array( __( 'Fetcher', 'upsun-mu-plugin' ), __( 'Backing source', 'upsun-mu-plugin' ) ) as $heading ) {
+			printf( '<th>%s</th>', esc_html( $heading ) );
+		}
+
+		echo '</tr></thead><tbody>';
+
+		foreach ( $status as $fetcher ) {
+			printf(
+				'<tr><td>%s</td><td>%s</td></tr>',
+				esc_html( $fetcher['label'] ),
+				esc_html(
+					$fetcher['available']
+						? __( 'active', 'upsun-mu-plugin' )
+						: __( 'not detected (skipped)', 'upsun-mu-plugin' )
+				)
+			);
+		}
+
+		echo '</tbody></table>';
 	}
 
 	/**
