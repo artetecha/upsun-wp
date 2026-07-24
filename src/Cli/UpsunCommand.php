@@ -665,11 +665,12 @@ class UpsunCommand {
 	 * : With --update/--update-all, report what would change without writing.
 	 *
 	 * [--format=<format>]
-	 * : Render --check-updates output in a particular format. With
-	 * --format=json on a --dry-run resolve (--update / --update-all), emit the
-	 * pending plans as a JSON array — {slug,type,from,to,fetcher} per package,
-	 * a stable contract for external tooling. The resolved download URL is
-	 * never emitted (it carries the license token).
+	 * : Render --check-updates output in a particular format. It also applies
+	 * to --update / --update-all: with --format=json a --dry-run emits the
+	 * pending plans and an actual run emits the applied results, both as a JSON
+	 * array ({slug,type,from,to,fetcher[,files]} per package) — a stable
+	 * contract for external tooling. The resolved download URL is never
+	 * emitted (it carries the license token).
 	 * ---
 	 * default: table
 	 * options:
@@ -815,7 +816,16 @@ class UpsunCommand {
 		}
 
 		if ( null === $result ) {
+			if ( 'json' === $format ) {
+				WP_CLI::line( '[]' );
+				return;
+			}
 			WP_CLI::success( sprintf( '%s is up to date; nothing was written.', $slug ) );
+			return;
+		}
+
+		if ( 'json' === $format ) {
+			WP_CLI::line( (string) wp_json_encode( array( self::result_public( $result ) ) ) );
 			return;
 		}
 
@@ -860,7 +870,7 @@ class UpsunCommand {
 			return;
 		}
 
-		$updated = 0;
+		$results = array();
 
 		foreach ( $plans as $plan ) {
 			try {
@@ -874,17 +884,25 @@ class UpsunCommand {
 					$plan
 				);
 			} catch ( \Throwable $exception ) {
+				// Warnings go to stderr, so they don't corrupt JSON stdout.
 				WP_CLI::warning( sprintf( '%s: %s', $plan['slug'], $exception->getMessage() ) );
 				continue;
 			}
 
 			if ( null !== $result ) {
-				++$updated;
-				WP_CLI::log( sprintf( 'Updated %s: %s → %s (%d files).', $result['slug'], $result['from'] ?: '?', $result['to'], $result['files'] ) );
+				$results[] = $result;
+				if ( 'json' !== $format ) {
+					WP_CLI::log( sprintf( 'Updated %s: %s → %s (%d files).', $result['slug'], $result['from'] ?: '?', $result['to'], $result['files'] ) );
+				}
 			}
 		}
 
-		WP_CLI::success( sprintf( 'Updated %d of %d package(s). Review the diff and commit.', $updated, count( $plans ) ) );
+		if ( 'json' === $format ) {
+			WP_CLI::line( (string) wp_json_encode( array_map( array( self::class, 'result_public' ), $results ) ) );
+			return;
+		}
+
+		WP_CLI::success( sprintf( 'Updated %d of %d package(s). Review the diff and commit.', count( $results ), count( $plans ) ) );
 	}
 
 	/**
@@ -905,6 +923,26 @@ class UpsunCommand {
 			'from'    => (string) $plan['from'],
 			'to'      => (string) $plan['to'],
 			'fetcher' => (string) $plan['fetcher'],
+		);
+	}
+
+	/**
+	 * An applied Vendor::update() result reduced to its reportable fields, for
+	 * machine-readable (--format=json) output on the actual-update path. Like
+	 * plan_public, it carries no download url/headers — those never existed on
+	 * the result, and the whitelist keeps it that way if the shape ever grows.
+	 *
+	 * @param array $result A Vendor::update() result.
+	 * @return array{slug:string,type:string,from:string,to:string,fetcher:string,files:int}
+	 */
+	private static function result_public( array $result ): array {
+		return array(
+			'slug'    => (string) $result['slug'],
+			'type'    => (string) $result['type'],
+			'from'    => (string) $result['from'],
+			'to'      => (string) $result['to'],
+			'fetcher' => (string) $result['fetcher'],
+			'files'   => (int) $result['files'],
 		);
 	}
 

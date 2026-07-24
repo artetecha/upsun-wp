@@ -56,7 +56,7 @@ if ( ! class_exists( 'Thim_Admin_Config' ) ) {
 		public static function get( $key ) {
 			$map = array(
 				'api_update_plugins' => 'https://downloads.thimpress.test/plugins',
-				'api_thim_market'    => 'https://updates.thimpress.test/market',
+				'api_thim_market'    => (string) ( $GLOBALS['upsun_test_thim_market'] ?? 'https://updates.thimpress.test/market' ),
 			);
 			return $map[ $key ] ?? '';
 		}
@@ -108,7 +108,7 @@ final class ThimPressFetcherTest extends TestCase {
 	}
 
 	protected function tearDown(): void {
-		unset( $GLOBALS['upsun_test_theme_template'], $GLOBALS['upsun_test_http_response'] );
+		unset( $GLOBALS['upsun_test_theme_template'], $GLOBALS['upsun_test_http_response'], $GLOBALS['upsun_test_thim_market'] );
 	}
 
 	public function test_identity_and_availability(): void {
@@ -139,6 +139,26 @@ final class ThimPressFetcherTest extends TestCase {
 
 	public function test_theme_update_null_when_market_unreachable(): void {
 		$GLOBALS['upsun_test_http_response'] = new WP_Error();
+
+		$this->assertNull( $this->fetcher->available_update( 'eduma', 'theme' ) );
+	}
+
+	public function test_theme_update_null_on_malformed_200_body(): void {
+		// A 200 whose body decodes to a scalar (not an object) must fall back
+		// to no update, not fatal on a string-offset access.
+		$GLOBALS['upsun_test_http_response'] = array( 'code' => 200, 'body' => '"error"' );
+
+		$this->assertNull( $this->fetcher->available_update( 'eduma', 'theme' ) );
+	}
+
+	public function test_theme_update_refuses_non_https_market(): void {
+		// If the market base were http, the purchase token must not be sent —
+		// the request is skipped before wp_remote_get, even given a good response.
+		$GLOBALS['upsun_test_thim_market']   = 'http://insecure.thimpress.test/market';
+		$GLOBALS['upsun_test_http_response'] = array(
+			'code' => 200,
+			'body' => json_encode( array( 'status' => 'success', 'data' => array( 'version' => '9.9.9' ) ) ),
+		);
 
 		$this->assertNull( $this->fetcher->available_update( 'eduma', 'theme' ) );
 	}

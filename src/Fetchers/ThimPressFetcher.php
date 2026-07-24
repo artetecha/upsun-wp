@@ -195,15 +195,27 @@ class ThimPressFetcher implements Fetcher, FetcherStatus {
 			\Thim_Admin_Config::get( 'api_thim_market' ) . '/license/version'
 		);
 
+		// The purchase token rides in the query string; refuse to send it
+		// over a non-https base (it would otherwise travel in cleartext and
+		// land in proxy/server access logs). The download step is https-only
+		// too — this version check must not be the weak link.
+		if ( ! preg_match( '#^https://#i', $url ) ) {
+			return '';
+		}
+
 		$response = wp_remote_get( $url, array( 'timeout' => 30 ) );
 
 		if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
 			return '';
 		}
 
+		// A 200 with a non-object body (e.g. a bare JSON string) decodes to a
+		// scalar; indexing that with a string key is a TypeError in PHP 8,
+		// which `??` does not suppress. Guard on is_array() so a malformed
+		// response falls back to "no update" instead of fatalling.
 		$body = json_decode( wp_remote_retrieve_body( $response ), true );
 
-		if ( ( $body['status'] ?? '' ) !== 'success' || empty( $body['data']['version'] ) ) {
+		if ( ! is_array( $body ) || ( $body['status'] ?? '' ) !== 'success' || empty( $body['data']['version'] ) ) {
 			return '';
 		}
 
