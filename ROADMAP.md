@@ -1,6 +1,6 @@
 # Roadmap
 
-## Status (2026-07-14)
+## Status (2026-07-24)
 
 | Milestone | Item | Status |
 |---|---|---|
@@ -18,6 +18,7 @@
 | v0.4 | Cloudflare front-end support (`cloudflare` module) | ✅ shipped in 0.4.0; reworked in 0.4.1 after live verification (Upsun router already resolves the client IP — detect via CF headers, don't rewrite REMOTE_ADDR) |
 | v0.4 | Security headers (`security-headers` module) | ✅ shipped in 0.4.2 — baseline headers on the HTML document (config.yaml `headers` are static-only), HSTS emitted directly or deferred to Cloudflare when it fronts the request |
 | v0.5 | Premium plugin vendoring toolkit (`wp upsun vendor`) | ✅ shipped in 0.5.0 — `wp upsun vendor <slug>` exports an installed plugin/theme as a Composer package; `--check-updates` + the `vendored_updates` check flag premium updates Composer won't catch; and `--update` re-vendors the new version via a `Fetcher` registry (built-in `TransientFetcher` + per-vendor add-ons) that downloads/extracts/re-vendors, merging over the upstream composer.json — credentials come from site state, never env |
+| v0.6 | Built-in ThimPress fetcher + JSON resolve contract | ✅ shipped in 0.6.0 (PR #8) — `ThimPressFetcher` graduates into the plugin (conditionally active like the integrations; `UPSUN_DISABLE_FETCHER_THIMPRESS`); `wp upsun vendor --dry-run --format=json` emits the re-vendor plans for CI (download URL never emitted); `vendor_fetchers` reporting in doctor/Site Health/dashboard |
 | — | Extraction to an independent repo | ✅ done — this repo, on Packagist as `artetecha/upsun-wp` |
 
 **v0.3 is complete, and the extraction is done:** the plugin lives in its own
@@ -457,6 +458,18 @@ where KEDS's `thim-update.yml` lives today.
 This revises the "consumer-side forever" note above: the dispatch, the generic
 transient fetcher, and the re-vendor engine move into the plugin; only each
 vendor's discovery call remains an add-on.
+
+**Graduated in 0.6.0.** The ThimPress add-on has moved into the plugin as a
+built-in `ThimPressFetcher` (`src/Fetchers/`) — conditionally active like the
+integrations (inert without thim-core, `UPSUN_DISABLE_FETCHER_THIMPRESS`), so
+Eduma/thim-core/LearnPress sites re-vendor with no custom fetcher. Two more
+pieces landed with it: a `--dry-run --format=json` resolve contract
+(`{slug,type,from,to,fetcher}`) for CI to consume — the token-bearing download
+URL is never emitted — and a `vendor_fetchers` check reporting the active
+fetchers (priority order + backing-source detection) in `wp upsun doctor`,
+Site Health, and the dashboard. The consumer/CI layer (per-package PR raising,
+the SSH-and-stream-back driver for the container→CI split) stays out of the
+plugin — it belongs in the starter repo as the operational toolkit.
 
 ### Other
 

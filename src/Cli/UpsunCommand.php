@@ -665,7 +665,12 @@ class UpsunCommand {
 	 * : With --update/--update-all, report what would change without writing.
 	 *
 	 * [--format=<format>]
-	 * : Render --check-updates output in a particular format.
+	 * : Render --check-updates output in a particular format. It also applies
+	 * to --update / --update-all: with --format=json a --dry-run emits the
+	 * pending plans and an actual run emits the applied results, both as a JSON
+	 * array ({slug,type,from,to,fetcher[,files]} per package) — a stable
+	 * contract for external tooling. The resolved download URL is never
+	 * emitted (it carries the license token).
 	 * ---
 	 * default: table
 	 * options:
@@ -682,6 +687,7 @@ class UpsunCommand {
 	 *     wp upsun vendor --check-updates
 	 *     wp upsun vendor learnpress-stripe --update --to=private-packages/plugins
 	 *     wp upsun vendor --update-all --to=private-packages/plugins --dry-run
+	 *     wp upsun vendor learnpress-stripe --update --dry-run --format=json
 	 */
 	public function vendor( $args, $assoc_args ) {
 		if ( ! empty( $assoc_args['check-updates'] ) ) {
@@ -771,14 +777,24 @@ class UpsunCommand {
 			WP_CLI::error( 'Provide a plugin or theme slug to update, or use --update-all.' );
 		}
 
+		$format = (string) ( $assoc_args['format'] ?? 'table' );
+
 		$plan = Vendor::resolve_update( $slug, ( $assoc_args['type'] ?? '' ) ?: null );
 
 		if ( null === $plan ) {
+			if ( 'json' === $format ) {
+				WP_CLI::line( '[]' );
+				return;
+			}
 			WP_CLI::success( sprintf( '%s is up to date (or no fetcher can resolve an update).', $slug ) );
 			return;
 		}
 
 		if ( $dry_run ) {
+			if ( 'json' === $format ) {
+				WP_CLI::line( (string) wp_json_encode( array( self::plan_public( $plan ) ) ) );
+				return;
+			}
 			WP_CLI::log( sprintf( 'Would update %s: %s → %s via %s.', $plan['slug'], $plan['from'] ?: '?', $plan['to'], $plan['fetcher'] ) );
 			return;
 		}
@@ -800,7 +816,16 @@ class UpsunCommand {
 		}
 
 		if ( null === $result ) {
+			if ( 'json' === $format ) {
+				WP_CLI::line( '[]' );
+				return;
+			}
 			WP_CLI::success( sprintf( '%s is up to date; nothing was written.', $slug ) );
+			return;
+		}
+
+		if ( 'json' === $format ) {
+			WP_CLI::line( (string) wp_json_encode( array( self::result_public( $result ) ) ) );
 			return;
 		}
 
@@ -821,14 +846,23 @@ class UpsunCommand {
 	 * loop `--update <slug>` per package (as KEDS's per-package PR flow does).
 	 */
 	private function vendor_update_all( array $assoc_args, bool $dry_run ): void {
-		$plans = Vendor::resolvable_updates();
+		$format = (string) ( $assoc_args['format'] ?? 'table' );
+		$plans  = Vendor::resolvable_updates();
 
 		if ( array() === $plans ) {
+			if ( 'json' === $format ) {
+				WP_CLI::line( '[]' );
+				return;
+			}
 			WP_CLI::success( 'Nothing to update — no resolvable pending updates.' );
 			return;
 		}
 
 		if ( $dry_run ) {
+			if ( 'json' === $format ) {
+				WP_CLI::line( (string) wp_json_encode( array_map( array( self::class, 'plan_public' ), $plans ) ) );
+				return;
+			}
 			foreach ( $plans as $plan ) {
 				WP_CLI::log( sprintf( 'Would update %s (%s): %s → %s via %s.', $plan['slug'], $plan['type'], $plan['from'] ?: '?', $plan['to'], $plan['fetcher'] ) );
 			}
@@ -836,7 +870,7 @@ class UpsunCommand {
 			return;
 		}
 
-		$updated = 0;
+		$results = array();
 
 		foreach ( $plans as $plan ) {
 			try {
@@ -850,17 +884,66 @@ class UpsunCommand {
 					$plan
 				);
 			} catch ( \Throwable $exception ) {
+				// Warnings go to stderr, so they don't corrupt JSON stdout.
 				WP_CLI::warning( sprintf( '%s: %s', $plan['slug'], $exception->getMessage() ) );
 				continue;
 			}
 
 			if ( null !== $result ) {
-				++$updated;
-				WP_CLI::log( sprintf( 'Updated %s: %s → %s (%d files).', $result['slug'], $result['from'] ?: '?', $result['to'], $result['files'] ) );
+				$results[] = $result;
+				if ( 'json' !== $format ) {
+					WP_CLI::log( sprintf( 'Updated %s: %s → %s (%d files).', $result['slug'], $result['from'] ?: '?', $result['to'], $result['files'] ) );
+				}
 			}
 		}
 
-		WP_CLI::success( sprintf( 'Updated %d of %d package(s). Review the diff and commit.', $updated, count( $plans ) ) );
+		if ( 'json' === $format ) {
+			WP_CLI::line( (string) wp_json_encode( array_map( array( self::class, 'result_public' ), $results ) ) );
+			return;
+		}
+
+		WP_CLI::success( sprintf( 'Updated %d of %d package(s). Review the diff and commit.', count( $results ), count( $plans ) ) );
+	}
+
+	/**
+	 * A resolve plan reduced to its non-secret fields, for machine-readable
+	 * (--format=json) dry-run output that external tooling can consume.
+	 *
+	 * Deliberately omits the resolved download `url` and `headers`: those
+	 * carry the licensed download's token and must never reach stdout or a
+	 * CI log. The token stays on the container; only the decision does not.
+	 *
+	 * @param array $plan A Vendor::resolve_update() plan.
+	 * @return array{slug:string,type:string,from:string,to:string,fetcher:string}
+	 */
+	private static function plan_public( array $plan ): array {
+		return array(
+			'slug'    => (string) $plan['slug'],
+			'type'    => (string) $plan['type'],
+			'from'    => (string) $plan['from'],
+			'to'      => (string) $plan['to'],
+			'fetcher' => (string) $plan['fetcher'],
+		);
+	}
+
+	/**
+	 * An applied Vendor::update() result reduced to its reportable fields, for
+	 * machine-readable (--format=json) output on the actual-update path. Like
+	 * plan_public, it carries no download url/headers — those never existed on
+	 * the result, and the whitelist keeps it that way if the shape ever grows.
+	 *
+	 * @param array $result A Vendor::update() result.
+	 * @return array{slug:string,type:string,from:string,to:string,fetcher:string,files:int}
+	 */
+	private static function result_public( array $result ): array {
+		return array(
+			'slug'    => (string) $result['slug'],
+			'type'    => (string) $result['type'],
+			'from'    => (string) $result['from'],
+			'to'      => (string) $result['to'],
+			'fetcher' => (string) $result['fetcher'],
+			'files'   => (int) $result['files'],
+		);
 	}
 
 	/**

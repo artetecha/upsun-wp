@@ -19,7 +19,7 @@ loader shim), and wire the post_deploy hook.
 // composer.json
 {
   "require": {
-    "artetecha/upsun-wp": "^0.5"
+    "artetecha/upsun-wp": "^0.6"
   }
 }
 ```
@@ -105,7 +105,7 @@ Skipping this step does **not** weaken the runtime preview protections (mail int
 | `environment-indicator` | Color-coded admin-bar badge (branch · environment type) with an Upsun Console link, a dashboard widget with environment metadata, and a matching banner on the login screen. |
 | `page-cache` | Emits `Cache-Control: public, max-age=0, s-maxage={ttl}` on anonymous, session-free page views so the Upsun router can cache them; optionally strips configured Set-Cookie headers (e.g. LMS guest sessions) to keep responses cacheable. Built-in bypass patterns cover core session cookies; commerce patterns come from the Integrations layer. `wp upsun cache-check <url>` (also a form in the dashboard Caching panel) explains any page's verdict: effective TTL, Set-Cookie spoilers, bypass-pattern matches, the route cookie allowlist (declared via `upsun_cache_check_route_cache` — Upsun does not expose it at runtime), and whether the fetch was a router HIT/MISS/BYPASS. |
 | `updates-policy` | Disables the in-app auto-update machinery (the filesystem is read-only; Composer is the update path), replaces the auto-update toggles with a note, and removes the core Site Health tests that would fail by design. |
-| `site-health` | Upsun-specific Site Health checks: object cache round-trip, cron configuration, writable mounts, preview search visibility, deploy migrations, live relationship health (MySQL ping, Redis INFO, HTTP/cluster status), disk usage; plus an "Upsun" section in the Info tab. |
+| `site-health` | Upsun-specific Site Health checks: object cache round-trip, cron configuration, writable mounts, preview search visibility, deploy migrations, live relationship health (MySQL ping, Redis INFO, HTTP/cluster status), disk usage, pending vendored/premium updates, and the active vendored-update fetchers; plus an "Upsun" section in the Info tab. |
 | `preview-protection` | Sends `X-Robots-Tag: noindex, nofollow` and robots meta on non-production environments, without touching the `blog_public` option (the database is a production clone). |
 | `smtp` | Points PHPMailer at the on-platform relay (`PLATFORM_SMTP_HOST`, port 25) unless a mailer plugin already configured SMTP. |
 | `dashboard` | A top-level "Upsun" page in wp-admin (`manage_options`) styled like the WP Dashboard: panels are real meta boxes in the core dashboard grid — collapsible, draggable between columns, layout persisted per user. Panels: environment, services (credentials never rendered), health checks, resolved caching config, module status; plus operational actions (flush object cache). Extensible via `upsun_dashboard_panels`; deliberately actions-not-settings — configuration stays in code. |
@@ -147,6 +147,7 @@ integrations do.
 - `UPSUN_MU_DISABLE` — kill switch for the whole plugin.
 - `UPSUN_DISABLE_CLOUDFLARE`, `UPSUN_DISABLE_SECURITY_HEADERS`, `UPSUN_DISABLE_ENVIRONMENT_INDICATOR`, `UPSUN_DISABLE_PAGE_CACHE`, `UPSUN_DISABLE_UPDATES_POLICY`, `UPSUN_DISABLE_SITE_HEALTH`, `UPSUN_DISABLE_PREVIEW_PROTECTION`, `UPSUN_DISABLE_SMTP`, `UPSUN_DISABLE_DASHBOARD`, `UPSUN_DISABLE_CRON_HEARTBEAT`, `UPSUN_DISABLE_SAFE_PREVIEWS`, `UPSUN_DISABLE_WRITABLE_PATHS`, `UPSUN_DISABLE_MOUNT_USAGE` — per-module switches.
 - `UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE`, `UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE_STRIPE` — per-integration switches.
+- `UPSUN_DISABLE_FETCHER_THIMPRESS` — turns off the built-in ThimPress vendored-update fetcher (it is already inert without thim-core).
 - `UPSUN_MIGRATIONS_DIR` — directory of deploy migrations (see below); unset = feature idle.
 - `UPSUN_MU_FORCE` — boot modules and integrations off-platform (testing against faked `PLATFORM_*` variables).
 
@@ -275,19 +276,30 @@ one; `--dry-run` previews.
 wp upsun vendor learnpress-stripe --update --to=private-packages/plugins
 ```
 
-Fetchers are the one pluggable piece, registered via `upsun_vendor_fetchers`
-(the Integrations pattern). The built-in `TransientFetcher` handles the whole
-class of standard licensed updaters — it reads the authenticated `package`
-URL the updater already put in the transient. **Credentials are never taken
-from env or config**: a fetcher reads them from the site's own state (the
-transient, or a vendor's registration record in the DB), so the token never
-leaves the environment it already lives in. A vendor whose update mechanism
-isn't the standard transient (e.g. ThimPress's catalog) is a small fetcher
-add-on you register — its `available_update()` reads its own token from the
-DB, same contract. Because discovery needs the activated DB and the writes
-need a writable filesystem, `--update` runs where both hold (a local/CI
-checkout with the license, or the container writing to a mount); raising a PR
-per package stays your CI's job.
+Fetchers are the pluggable piece, and two ship built in. `TransientFetcher`
+handles the whole class of standard licensed updaters — it reads the
+authenticated `package` URL the updater already put in the transient.
+`ThimPressFetcher` (0.6.0) resolves ThimPress packages — the Eduma theme,
+thim-core, LearnPress add-ons — through thim-core's own catalog and license.
+As with the integrations, a built-in fetcher is always shipped but
+**conditionally active**: `ThimPressFetcher` no-ops (and dispatch falls
+through to the transient fallback) on any site without thim-core, and can be
+turned off with `UPSUN_DISABLE_FETCHER_THIMPRESS`. For another vendor,
+register your own through the `upsun_vendor_fetchers` filter.
+
+**Credentials are never taken from env or config**: a fetcher reads them from
+the site's own state (the transient, or a vendor's registration record in the
+DB), so the token never leaves the environment it already lives in.
+
+`wp upsun doctor`, Site Health, and the dashboard report the active fetchers
+in priority order (the `vendor_fetchers` check), so you can see which resolver
+would handle a package and whether its backing source is detected. For CI,
+`--dry-run --format=json` emits the pending re-vendor plans as a JSON array
+(`{slug,type,from,to,fetcher}`) — a stable contract; the resolved download URL
+is never emitted (it carries the token). Because discovery needs the activated
+DB and the writes need a writable filesystem, `--update` runs where both hold
+(a local/CI checkout with the license, or the container writing to a mount);
+raising a PR per package stays your CI's job.
 
 ### Helper functions
 
@@ -320,7 +332,9 @@ wp upsun vendor <slug>   # export an installed premium plugin/theme as a Compose
 wp upsun vendor eduma --type=theme --to=private-packages/themes --vendor=keds-theme
 wp upsun vendor --check-updates   # installed plugins/themes with a pending update (flags premium)
 wp upsun vendor learnpress-stripe --update --to=private-packages/plugins   # re-vendor the new version
+                         # ThimPress packages (Eduma, thim-core, LP add-ons) resolve via the built-in fetcher
 wp upsun vendor --update-all --to=private-packages/plugins --dry-run       # preview all resolvable updates
+wp upsun vendor learnpress-stripe --update --dry-run --format=json         # machine-readable plan for CI (no token)
 ```
 
 All commands except `wp upsun cloudflare` and `wp upsun vendor` print "Not running on Upsun." and exit 0 off-platform. `cloudflare` is host-agnostic (it talks to the Cloudflare API using `CLOUDFLARE_*` credentials); `vendor` is a local/onboarding tool that reads installed plugins/themes and writes a package to a writable target, so both also run from CI or a local shell.
@@ -347,8 +361,13 @@ Cloudflare in front of the Upsun router (the router already provides the real
 client IP, so the module verifies rather than rewrites it), and the
 `security-headers` module (0.4.2) — baseline response headers on the HTML
 document (which `config.yaml` can't reach), with HSTS emitted directly or
-deferred to Cloudflare when it fronts the request. Most recent (0.5.0): the
-premium plugin vendoring toolkit (`wp upsun vendor`) — export, `--check-updates`,
-and programmatic re-vendoring via `--update` through a pluggable `Fetcher`
-registry. Router cache purge remains blocked on a platform purge API — though the
-`cloudflare` module now purges the *edge* cache when Cloudflare fronts the site.
+deferred to Cloudflare when it fronts the request. The vendoring toolkit
+(0.5.0) added `wp upsun vendor` — export, `--check-updates`, and programmatic
+re-vendoring via `--update` through a pluggable `Fetcher` registry. Most recent
+(0.6.0): a built-in `ThimPressFetcher` (conditionally active, like the
+integrations) so Eduma/thim-core/LearnPress sites re-vendor with no custom
+fetcher; a `--dry-run --format=json` resolve contract for CI (the token is
+never emitted); and `vendor_fetchers` reporting in `wp upsun doctor`, Site
+Health, and the dashboard. Router cache purge remains blocked on a platform
+purge API — though the `cloudflare` module now purges the *edge* cache when
+Cloudflare fronts the site.

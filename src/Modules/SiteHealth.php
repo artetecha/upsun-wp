@@ -60,6 +60,10 @@ class SiteHealth implements Module {
 				'label'    => __( 'Vendored package updates', 'upsun-mu-plugin' ),
 				'callback' => array( \Upsun\Vendor::class, 'check' ),
 			),
+			'vendor_fetchers'   => array(
+				'label'    => __( 'Vendored-update fetchers', 'upsun-mu-plugin' ),
+				'callback' => array( \Upsun\Vendor::class, 'check_fetchers' ),
+			),
 		);
 
 		/**

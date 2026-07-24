@@ -15,7 +15,7 @@ if ( defined( 'UPSUN_MU_PLUGIN_DIR' ) ) {
 }
 
 define( 'UPSUN_MU_PLUGIN_DIR', __DIR__ );
-define( 'UPSUN_MU_PLUGIN_VERSION', '0.5.0' );
+define( 'UPSUN_MU_PLUGIN_VERSION', '0.6.0' );
 
 require_once __DIR__ . '/src/Environment.php';
 require_once __DIR__ . '/src/helpers.php';
@@ -25,7 +25,9 @@ require_once __DIR__ . '/src/Migrations.php';
 require_once __DIR__ . '/src/RelationshipHealth.php';
 require_once __DIR__ . '/src/Vendor.php';
 require_once __DIR__ . '/src/Fetcher.php';
+require_once __DIR__ . '/src/FetcherStatus.php';
 require_once __DIR__ . '/src/Fetchers/TransientFetcher.php';
+require_once __DIR__ . '/src/Fetchers/ThimPressFetcher.php';
 require_once __DIR__ . '/src/Module.php';
 require_once __DIR__ . '/src/ModuleRegistry.php';
 require_once __DIR__ . '/src/Integration.php';
