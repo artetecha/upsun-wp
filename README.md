@@ -426,6 +426,21 @@ PHP **8.1–8.5** and WordPress **6.0+**, both enforced in CI: the unit suite ru
 on every PHP version in that range, and the integration harness runs five
 curated PHP × WordPress corners including the 6.0/8.1 floor.
 
+## Security
+
+Report vulnerabilities privately — see [SECURITY.md](SECURITY.md) for the
+process, the supported versions, and what is in scope.
+
+[`docs/threat-model.md`](docs/threat-model.md) documents the four privileged
+surfaces and the guards on each: the **vendoring engine** (it downloads code that
+you then commit and execute — https on every redirect hop, zip-slip and expansion
+caps, credentials only ever from site state, and the authenticated URL never
+printed), the **Cloudflare origin guard**, the **DB-writing sanitizers**
+(production-refusing and opt-in), and **SMTP**. It also states the risks
+knowingly accepted — most importantly that **any plugin loaded into WordPress can
+read a secret passed through a filter**, so prefer the environment-variable path
+for `CLOUDFLARE_API_TOKEN` and friends.
+
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) for the versioned plan. The v0.2 and v0.3

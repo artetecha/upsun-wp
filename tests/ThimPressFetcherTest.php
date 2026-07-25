@@ -11,32 +11,9 @@ use Upsun\Vendor;
  * stub, and driven by globals so they stay benign for tests that don't set them.
  */
 
-if ( ! class_exists( 'WP_Error' ) ) {
-	class WP_Error {}
-}
-if ( ! function_exists( 'is_wp_error' ) ) {
-	function is_wp_error( $thing ) {
-		return $thing instanceof WP_Error;
-	}
-}
 if ( ! function_exists( 'add_query_arg' ) ) {
 	function add_query_arg( array $args, string $url ): string {
 		return $url . '?' . http_build_query( $args );
-	}
-}
-if ( ! function_exists( 'wp_remote_get' ) ) {
-	function wp_remote_get( $url, $args = array() ) {
-		return $GLOBALS['upsun_test_http_response'] ?? new WP_Error();
-	}
-}
-if ( ! function_exists( 'wp_remote_retrieve_response_code' ) ) {
-	function wp_remote_retrieve_response_code( $r ) {
-		return is_array( $r ) ? ( $r['code'] ?? 0 ) : 0;
-	}
-}
-if ( ! function_exists( 'wp_remote_retrieve_body' ) ) {
-	function wp_remote_retrieve_body( $r ) {
-		return is_array( $r ) ? ( $r['body'] ?? '' ) : '';
 	}
 }
 if ( ! function_exists( 'wp_get_theme' ) ) {
@@ -104,11 +81,12 @@ final class ThimPressFetcherTest extends TestCase {
 		upsun_test_reset_hooks();
 		$this->fetcher                          = new ThimPressFetcher();
 		$GLOBALS['upsun_test_theme_template']   = 'eduma';
-		$GLOBALS['upsun_test_http_response']    = null;
+		upsun_test_http_reset();
 	}
 
 	protected function tearDown(): void {
-		unset( $GLOBALS['upsun_test_theme_template'], $GLOBALS['upsun_test_http_response'], $GLOBALS['upsun_test_thim_market'] );
+		upsun_test_http_reset();
+		unset( $GLOBALS['upsun_test_theme_template'], $GLOBALS['upsun_test_thim_market'] );
 	}
 
 	public function test_identity_and_availability(): void {
@@ -125,9 +103,13 @@ final class ThimPressFetcherTest extends TestCase {
 	}
 
 	public function test_theme_update_resolves_version_and_licensed_url(): void {
-		$GLOBALS['upsun_test_http_response'] = array(
-			'code' => 200,
-			'body' => json_encode( array( 'status' => 'success', 'data' => array( 'version' => '5.5.0' ) ) ),
+		upsun_test_http_reset(
+			array(
+				array(
+					'code' => 200,
+					'body' => json_encode( array( 'status' => 'success', 'data' => array( 'version' => '5.5.0' ) ) ),
+				),
+			)
 		);
 
 		$update = $this->fetcher->available_update( 'eduma', 'theme' );
@@ -138,7 +120,7 @@ final class ThimPressFetcherTest extends TestCase {
 	}
 
 	public function test_theme_update_null_when_market_unreachable(): void {
-		$GLOBALS['upsun_test_http_response'] = new WP_Error();
+		upsun_test_http_reset( array( array( 'error' => 'unreachable' ) ) );
 
 		$this->assertNull( $this->fetcher->available_update( 'eduma', 'theme' ) );
 	}
@@ -146,7 +128,7 @@ final class ThimPressFetcherTest extends TestCase {
 	public function test_theme_update_null_on_malformed_200_body(): void {
 		// A 200 whose body decodes to a scalar (not an object) must fall back
 		// to no update, not fatal on a string-offset access.
-		$GLOBALS['upsun_test_http_response'] = array( 'code' => 200, 'body' => '"error"' );
+		upsun_test_http_reset( array( array( 'code' => 200, 'body' => '"error"' ) ) );
 
 		$this->assertNull( $this->fetcher->available_update( 'eduma', 'theme' ) );
 	}
@@ -154,13 +136,20 @@ final class ThimPressFetcherTest extends TestCase {
 	public function test_theme_update_refuses_non_https_market(): void {
 		// If the market base were http, the purchase token must not be sent —
 		// the request is skipped before wp_remote_get, even given a good response.
-		$GLOBALS['upsun_test_thim_market']   = 'http://insecure.thimpress.test/market';
-		$GLOBALS['upsun_test_http_response'] = array(
-			'code' => 200,
-			'body' => json_encode( array( 'status' => 'success', 'data' => array( 'version' => '9.9.9' ) ) ),
+		$GLOBALS['upsun_test_thim_market'] = 'http://insecure.thimpress.test/market';
+
+		upsun_test_http_reset(
+			array(
+				array(
+					'code' => 200,
+					'body' => json_encode( array( 'status' => 'success', 'data' => array( 'version' => '9.9.9' ) ) ),
+				),
+			)
 		);
 
 		$this->assertNull( $this->fetcher->available_update( 'eduma', 'theme' ) );
+		// Skipped before the request, not merely ignored afterwards.
+		$this->assertSame( array(), $GLOBALS['upsun_test_http']['requests'] );
 	}
 
 	public function test_plugin_update_resolves_from_catalog(): void {
