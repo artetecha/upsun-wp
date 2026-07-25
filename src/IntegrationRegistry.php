@@ -32,6 +32,8 @@ final class IntegrationRegistry {
 	 * 2. Off-platform: no-op (UPSUN_MU_FORCE overrides).
 	 * 3. Per-integration UPSUN_DISABLE_INTEGRATION_{ID} constants.
 	 * 4. The upsun_integrations filter (for other mu-plugins).
+	 *
+	 * @internal
 	 */
 	public static function boot(): void {
 		self::$status    = array();

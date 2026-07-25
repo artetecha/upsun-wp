@@ -42,6 +42,8 @@ final class ModuleRegistry {
 	 * 3. Per-module UPSUN_DISABLE_{MODULE} constants (wp-config friendly).
 	 * 4. The upsun_mu_modules filter (for other mu-plugins).
 	 * 5. Each module's own should_load().
+	 *
+	 * @internal
 	 */
 	public static function boot(): void {
 		self::$status = array();

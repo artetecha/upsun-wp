@@ -85,11 +85,16 @@ final class Sanitizers {
 	 * array to clear.
 	 *
 	 * @param array<string, mixed> $forced id => true|string.
+	 *
+	 * @internal
 	 */
 	public static function force( array $forced ): void {
 		self::$forced = $forced;
 	}
 
+	/**
+	 * @internal
+	 */
 	public static function is_enabled( string $id, array $sanitizer ): bool {
 		if ( array_key_exists( $id, self::$forced ) ) {
 			return true;
@@ -137,6 +142,8 @@ final class Sanitizers {
 	 * anonymized users stops — that is the point.
 	 *
 	 * @return string|null
+	 *
+	 * @internal
 	 */
 	public static function anonymize_user_emails( bool $dry_run ): ?string {
 		global $wpdb;
@@ -183,6 +190,8 @@ final class Sanitizers {
 	 * control.
 	 *
 	 * @return string|null
+	 *
+	 * @internal
 	 */
 	public static function anonymize_user_passwords( bool $dry_run ): ?string {
 		global $wpdb;
@@ -230,6 +239,8 @@ final class Sanitizers {
 
 	/**
 	 * @return string|null
+	 *
+	 * @internal
 	 */
 	public static function deactivate_listed_plugins( bool $dry_run ): ?string {
 		$targets = self::deactivation_targets();
@@ -267,6 +278,8 @@ final class Sanitizers {
 
 	/**
 	 * @return string|null
+	 *
+	 * @internal
 	 */
 	public static function scrub_listed_options( bool $dry_run ): ?string {
 		$specs = self::scrub_specs();

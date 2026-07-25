@@ -26,6 +26,8 @@ final class Migrations {
 
 	/**
 	 * The migrations directory, or null when the feature is not configured.
+	 *
+	 * @internal
 	 */
 	public static function directory(): ?string {
 		$default = defined( 'UPSUN_MIGRATIONS_DIR' ) ? (string) UPSUN_MIGRATIONS_DIR : null;
@@ -92,6 +94,8 @@ final class Migrations {
 
 	/**
 	 * @return string[] Ids of migrations with invalid filenames.
+	 *
+	 * @internal
 	 */
 	public static function invalid(): array {
 		return array_column(

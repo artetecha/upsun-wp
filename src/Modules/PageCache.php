@@ -87,6 +87,54 @@ class PageCache implements Module {
 		return true;
 	}
 
+	/**
+	 * The single application point of upsun_page_cache_ttl. Reporting
+	 * surfaces (the dashboard's caching panel, wp upsun cache-check) read
+	 * the settings through these accessors rather than re-applying the
+	 * filters, so every consumer callback runs once per request and the
+	 * defaults live in exactly one place.
+	 *
+	 * @internal
+	 */
+	public static function ttl(): int {
+		/**
+		 * Filters the shared-cache TTL in seconds. Zero or less disables
+		 * the Cache-Control header entirely.
+		 *
+		 * @param int $ttl Default 600.
+		 */
+		return (int) apply_filters( 'upsun_page_cache_ttl', self::DEFAULT_TTL );
+	}
+
+	/**
+	 * @internal
+	 * @return string[] Cookie-name regexes that mark a request personalised.
+	 */
+	public static function bypass_patterns(): array {
+		/**
+		 * Filters the cookie-name regexes that mark a request personalised.
+		 *
+		 * @param string[] $patterns
+		 */
+		return (array) apply_filters( 'upsun_page_cache_bypass_cookie_patterns', self::DEFAULT_COOKIE_PATTERNS );
+	}
+
+	/**
+	 * @internal
+	 * @return string[] Cookie-name prefixes to strip from responses.
+	 */
+	public static function stripped_cookies(): array {
+		/**
+		 * Filters the cookie-name prefixes whose Set-Cookie headers are
+		 * stripped from anonymous responses. Empty by default.
+		 *
+		 * @param string[] $prefixes
+		 */
+		$prefixes = (array) apply_filters( 'upsun_page_cache_strip_cookies', array() );
+
+		return array_values( array_filter( array_map( 'strval', $prefixes ), 'strlen' ) );
+	}
+
 	public function maybe_send_cache_headers(): void {
 		if ( headers_sent() || is_admin() || is_user_logged_in() ) {
 			return;
@@ -102,12 +150,7 @@ class PageCache implements Module {
 			// Set by e.g. WooCommerce on cart, checkout, account pages.
 			|| ( defined( 'DONOTCACHEPAGE' ) && DONOTCACHEPAGE );
 
-		/**
-		 * Filters the cookie-name regexes that mark a request personalised.
-		 *
-		 * @param string[] $patterns
-		 */
-		$patterns = (array) apply_filters( 'upsun_page_cache_bypass_cookie_patterns', self::DEFAULT_COOKIE_PATTERNS );
+		$patterns = self::bypass_patterns();
 
 		$cacheable = self::is_cacheable_request(
 			array(
@@ -135,13 +178,7 @@ class PageCache implements Module {
 			return;
 		}
 
-		/**
-		 * Filters the shared-cache TTL in seconds. Zero or less disables
-		 * the Cache-Control header entirely.
-		 *
-		 * @param int $ttl Default 600.
-		 */
-		$ttl = (int) apply_filters( 'upsun_page_cache_ttl', self::DEFAULT_TTL );
+		$ttl = self::ttl();
 
 		if ( $ttl <= 0 ) {
 			return;
@@ -164,7 +201,7 @@ class PageCache implements Module {
 			return;
 		}
 
-		$prefixes = $this->strip_prefixes();
+		$prefixes = self::stripped_cookies();
 
 		if ( ! $prefixes ) {
 			return;
@@ -196,7 +233,7 @@ class PageCache implements Module {
 			return;
 		}
 
-		$prefixes = $this->strip_prefixes();
+		$prefixes = self::stripped_cookies();
 
 		if ( ! $prefixes ) {
 			return;
@@ -230,20 +267,5 @@ class PageCache implements Module {
 
 	private function is_personalised_context(): bool {
 		return is_admin() || ( function_exists( 'is_user_logged_in' ) && is_user_logged_in() );
-	}
-
-	/**
-	 * @return string[] Cookie-name prefixes to strip from responses.
-	 */
-	private function strip_prefixes(): array {
-		/**
-		 * Filters the cookie-name prefixes whose Set-Cookie headers are
-		 * stripped from anonymous responses. Empty by default.
-		 *
-		 * @param string[] $prefixes
-		 */
-		$prefixes = (array) apply_filters( 'upsun_page_cache_strip_cookies', array() );
-
-		return array_values( array_filter( array_map( 'strval', $prefixes ), 'strlen' ) );
 	}
 }

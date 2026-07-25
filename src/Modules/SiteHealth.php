@@ -175,7 +175,7 @@ class SiteHealth implements Module {
 		}
 
 		$protected = ! ( defined( 'UPSUN_DISABLE_PREVIEW_PROTECTION' ) && UPSUN_DISABLE_PREVIEW_PROTECTION )
-			&& apply_filters( 'upsun_preview_noindex', true );
+			&& PreviewProtection::noindex();
 
 		if ( $protected ) {
 			return array(

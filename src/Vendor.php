@@ -36,6 +36,8 @@ final class Vendor {
 	 * @param string $vendor Composer vendor namespace. Default 'private'.
 	 * @param string $license SPDX id override; empty means header-or-proprietary.
 	 * @return array The composer.json structure.
+	 *
+	 * @internal
 	 */
 	public static function build_composer_json( array $header, string $type, string $slug, string $vendor = 'private', string $license = '' ): array {
 		$type   = ( 'theme' === $type ) ? 'theme' : 'plugin';
@@ -94,6 +96,8 @@ final class Vendor {
 	 * @param object|false $plugins update_plugins transient.
 	 * @param object|false $themes  update_themes transient.
 	 * @return array<int, array{slug:string,type:string,new:string,source:string,package:string}>
+	 *
+	 * @internal
 	 */
 	public static function classify_updates( $plugins, $themes ): array {
 		$rows = array();
@@ -138,6 +142,8 @@ final class Vendor {
 	/**
 	 * Recursively copy a file or directory tree, returning the number of
 	 * files written. Pure filesystem; used by export().
+	 *
+	 * @internal
 	 */
 	public static function copy_tree( string $src, string $dest ): int {
 		if ( is_file( $src ) ) {
@@ -302,6 +308,8 @@ final class Vendor {
 
 	/**
 	 * Whether the slug resolves to an installed plugin or theme.
+	 *
+	 * @internal
 	 */
 	public static function detect_type( string $slug ): ?string {
 		if ( defined( 'WP_PLUGIN_DIR' ) && ( is_dir( WP_PLUGIN_DIR . '/' . $slug ) || is_file( WP_PLUGIN_DIR . '/' . $slug . '.php' ) ) ) {
@@ -451,6 +459,8 @@ final class Vendor {
 	 * TransientFetcher appended as the universal fallback.
 	 *
 	 * @return Fetcher[]
+	 *
+	 * @internal
 	 */
 	public static function fetchers(): array {
 		/**
@@ -547,6 +557,8 @@ final class Vendor {
 
 	/**
 	 * The first fetcher that supports the package.
+	 *
+	 * @internal
 	 */
 	public static function pick_fetcher( string $slug, string $type ): ?Fetcher {
 		foreach ( self::fetchers() as $fetcher ) {
@@ -568,6 +580,8 @@ final class Vendor {
 	 *
 	 * @param array<string,mixed> $upstream Decoded upstream composer.json (or empty).
 	 * @return array<string,mixed>
+	 *
+	 * @internal
 	 */
 	public static function merge_composer_json( array $upstream, string $name, string $type, string $version ): array {
 		$strip = array(
@@ -779,6 +793,8 @@ final class Vendor {
 	/**
 	 * Download a URL (or copy a local/file:// path, for artifacts and tests)
 	 * to a destination file.
+	 *
+	 * @internal
 	 */
 	public static function fetch_zip( string $url, array $headers, string $dest ): bool {
 		self::ensure_dir( dirname( $dest ) );
@@ -820,6 +836,8 @@ final class Vendor {
 	 * Extract a zip and return the directory to vendor from — the single
 	 * top-level directory the archive wraps its files in, if any, else the
 	 * extraction root. Null on failure.
+	 *
+	 * @internal
 	 */
 	public static function extract_zip( string $zip, string $dest ): ?string {
 		if ( ! class_exists( '\ZipArchive' ) ) {
@@ -872,6 +890,8 @@ final class Vendor {
 	/**
 	 * Recursively delete a path (used to replace a package on re-vendor and
 	 * to clean the work directory).
+	 *
+	 * @internal
 	 */
 	public static function remove_tree( string $path ): void {
 		if ( is_file( $path ) || is_link( $path ) ) {

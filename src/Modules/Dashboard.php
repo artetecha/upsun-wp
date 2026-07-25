@@ -404,12 +404,12 @@ class Dashboard implements Module {
 	}
 
 	public function render_caching_panel(): void {
-		$ttl      = (int) apply_filters( 'upsun_page_cache_ttl', PageCache::DEFAULT_TTL );
-		$patterns = (array) apply_filters( 'upsun_page_cache_bypass_cookie_patterns', PageCache::DEFAULT_COOKIE_PATTERNS );
-		$stripped = array_filter( array_map( 'strval', (array) apply_filters( 'upsun_page_cache_strip_cookies', array() ) ) );
+		$ttl      = PageCache::ttl();
+		$patterns = PageCache::bypass_patterns();
+		$stripped = PageCache::stripped_cookies();
 		$state    = ModuleRegistry::status()['page-cache']['state'] ?? 'unknown';
 
-		// Values below are resolved through the live filters, so consumer
+		// Values below come from PageCache's own accessors, so consumer
 		// overrides are reflected exactly as the PageCache module sees them.
 		$rows = array(
 			__( 'Page cache module', 'upsun-mu-plugin' )     => $this->state_label( $state ),
