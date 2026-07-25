@@ -241,6 +241,19 @@ say 'On-platform assertions'
 
 wpcli eval-file "${PLUGIN_DIR}/tests/integration/on-platform.php"
 
+say 'Deprecation notices (WP_DEBUG on)'
+
+# _deprecated_hook() only calls trigger_error() under WP_DEBUG, so the notices
+# get their own phase with it enabled — and switched back off afterwards, so the
+# HTTP phase below sees a production-like configuration.
+wpcli config set WP_DEBUG true --raw
+wpcli config set WP_DEBUG_DISPLAY false --raw
+wpcli eval-file "${PLUGIN_DIR}/tests/integration/deprecations.php" || {
+	wpcli config set WP_DEBUG false --raw
+	die 'the deprecation shims did not report through core'
+}
+wpcli config set WP_DEBUG false --raw
+
 say 'Kill switch on-platform'
 
 # UPSUN_MU_DISABLE is a documented public constant, so it needs coverage on the

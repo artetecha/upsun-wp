@@ -74,6 +74,22 @@ final class IntegrationRegistry {
 				continue;
 			}
 
+			/**
+			 * Filters whether a single integration boots, by id ('woocommerce',
+			 * 'wp-rocket', ...) — the conditional counterpart to
+			 * UPSUN_DISABLE_INTEGRATION_{ID}, which is read first and wins.
+			 *
+			 * @param bool   $enabled Default true.
+			 * @param string $id      Integration id.
+			 */
+			if ( ! (bool) apply_filters( 'upsun_integration_enabled', true, $id ) ) {
+				self::$status[ $id ] = array(
+					'class' => $class,
+					'state' => 'disabled',
+				);
+				continue;
+			}
+
 			if ( ! class_exists( $class ) ) {
 				self::$status[ $id ] = array(
 					'class' => $class,

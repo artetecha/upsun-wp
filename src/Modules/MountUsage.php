@@ -14,6 +14,7 @@
 
 namespace Upsun\Modules;
 
+use Upsun\Deprecations;
 use Upsun\Environment;
 use Upsun\Module;
 use Upsun\RelationshipHealth;
@@ -26,12 +27,10 @@ class MountUsage implements Module {
 	public const HOOK = 'upsun_mount_usage_measure';
 
 	public function should_load(): bool {
-		/**
-		 * Filters whether mount-usage measurement and reporting is active.
-		 *
-		 * @param bool $enabled Default true.
-		 */
-		return (bool) apply_filters( 'upsun_mount_usage_enabled', true );
+		// Boot gating belongs to the registry: UPSUN_DISABLE_MOUNT_USAGE and
+		// the upsun_module_enabled filter are applied there, uniformly for
+		// every module rather than the eight that happened to have one.
+		return true;
 	}
 
 	public function register(): void {
@@ -153,7 +152,11 @@ class MountUsage implements Module {
 		 *
 		 * @param array{0: int, 1: int} $thresholds Default [ 80, 95 ] (warn, fail).
 		 */
-		$thresholds = (array) apply_filters( 'upsun_disk_usage_thresholds', array( 80, 95 ) );
+		$thresholds = (array) Deprecations::filter(
+			'upsun_mount_usage_thresholds',
+			'upsun_disk_usage_thresholds',
+			array( 80, 95 )
+		);
 		$warn       = (int) ( $thresholds[0] ?? 80 );
 		$fail       = (int) ( $thresholds[1] ?? 95 );
 		$used_pct   = 100 * ( $total - $free ) / $total;

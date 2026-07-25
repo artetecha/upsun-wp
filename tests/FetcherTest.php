@@ -72,6 +72,40 @@ final class FetcherTest extends TestCase {
 		$this->assertInstanceOf( TransientFetcher::class, end( $fetchers ) );
 	}
 
+	/**
+	 * 0.7 gave fetchers the same filter gate modules and integrations have.
+	 * The fallback needed it most: README documented
+	 * UPSUN_DISABLE_FETCHER_TRANSIENT, but fetchers() appended the transient
+	 * fetcher unconditionally, so the documented switch did nothing.
+	 */
+	public function test_fetcher_enabled_filter_can_drop_the_fallback(): void {
+		add_filter( 'upsun_fetcher_enabled', fn ( $enabled, $id ) => 'transient' !== $id, 10, 2 );
+
+		$ids = array_map( static fn ( $f ) => $f->id(), Vendor::fetchers() );
+
+		$this->assertNotContains( 'transient', $ids );
+		$this->assertContains( 'thimpress', $ids );
+	}
+
+	public function test_fetcher_enabled_filter_can_drop_a_built_in(): void {
+		add_filter( 'upsun_fetcher_enabled', fn ( $enabled, $id ) => 'thimpress' !== $id, 10, 2 );
+
+		$ids = array_map( static fn ( $f ) => $f->id(), Vendor::fetchers() );
+
+		$this->assertNotContains( 'thimpress', $ids );
+		$this->assertContains( 'transient', $ids );
+	}
+
+	/**
+	 * With no fallback, an unclaimed slug resolves to nothing rather than
+	 * silently falling back — the documented consequence of turning it off.
+	 */
+	public function test_dropping_the_fallback_leaves_unclaimed_slugs_unresolvable(): void {
+		add_filter( 'upsun_fetcher_enabled', fn ( $enabled, $id ) => 'transient' !== $id, 10, 2 );
+
+		$this->assertNull( Vendor::pick_fetcher( 'anything', 'plugin' ) );
+	}
+
 	public function test_registered_fetcher_wins_over_the_fallback(): void {
 		$fixture = new UpsunFixtureFetcher( 'eduma', '9.9', '/nope.zip' );
 		add_filter( 'upsun_vendor_fetchers', static fn ( array $f ) => array_merge( $f, array( $fixture ) ) );

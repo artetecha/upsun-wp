@@ -168,12 +168,15 @@ final class WritablePathsTest extends TestCase {
 		$this->assertArrayHasKey( 'writable_paths', $checks );
 	}
 
-	public function test_enabled_filter_gates_should_load(): void {
+	/**
+	 * Boot gating moved to ModuleRegistry in 0.7; see ModuleRegistryTest.
+	 */
+	public function test_should_load_is_unconditional(): void {
 		$this->assertTrue( ( new WritablePaths() )->should_load() );
 
 		add_filter( 'upsun_writable_paths_enabled', '__return_false' );
 
-		$this->assertFalse( ( new WritablePaths() )->should_load() );
+		$this->assertTrue( ( new WritablePaths() )->should_load() );
 	}
 
 	public function test_advisory_integrations_contribute_requirements(): void {

@@ -100,7 +100,7 @@ Skipping this step does **not** weaken the runtime preview protections (mail int
 
 | Module | What it does |
 |---|---|
-| `cloudflare` | For sites proxied by Cloudflare in front of the Upsun router. **The Upsun router already resolves the real client IP into `REMOTE_ADDR`** (verified: `REMOTE_ADDR` == `CF-Connecting-IP` == `X-Client-IP`, and Cloudflare's edge never appears in `REMOTE_ADDR`/`X-Forwarded-For`), so this module does **not** rewrite it — that would be redundant and, on a direct origin hit, spoofable. It detects Cloudflare via the `CF-Ray`/`CF-Connecting-IP` headers and adds a health check + dashboard panel that confirm fronting and that `REMOTE_ADDR` agrees with `CF-Connecting-IP`. Adds `wp upsun cloudflare purge` — the edge invalidation the Upsun router cache never had — with optional auto-purge of a post's URL on change, and an optional shared-secret origin guard (off by default) that rejects production requests bypassing Cloudflare. A raw-origin `REMOTE_ADDR` restoration path exists for consumers without an IP-resolving router, gated off by default (`upsun_cloudflare_restore_remote_addr`). Inert where Cloudflare isn't fronting, so it's safe to leave enabled everywhere. |
+| `cloudflare` | For sites proxied by Cloudflare in front of the Upsun router. **The Upsun router already resolves the real client IP into `REMOTE_ADDR`** (verified: `REMOTE_ADDR` == `CF-Connecting-IP` == `X-Client-IP`, and Cloudflare's edge never appears in `REMOTE_ADDR`/`X-Forwarded-For`), so this module does **not** rewrite it — that would be redundant and, on a direct origin hit, spoofable. It detects Cloudflare via the `CF-Ray`/`CF-Connecting-IP` headers and adds a health check + dashboard panel that confirm fronting and that `REMOTE_ADDR` agrees with `CF-Connecting-IP`. Adds `wp upsun cloudflare purge` — the edge invalidation the Upsun router cache never had — with optional auto-purge of a post's URL on change, and an optional shared-secret origin guard (off by default) that rejects production requests bypassing Cloudflare. Inert where Cloudflare isn't fronting, so it's safe to leave enabled everywhere. |
 | `security-headers` | Emits baseline security response headers on the front end — `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: SAMEORIGIN`. These protect the **HTML document**, which on Upsun can't be covered from `config.yaml` (its `web.locations` `headers` only decorate static files; dynamic passthru responses get headers from the app). HSTS is handled deliberately: when the `cloudflare` module detects the request is proxied, the edge owns HSTS and this module **defers** (no duplicate header) — otherwise, on a direct-Upsun production site over HTTPS, it emits HSTS itself. Either way there's exactly one source, and Site Health + the dashboard say which. CSP is intentionally left to consumers (it's inherently per-site). Header set is filterable via `upsun_security_headers`. |
 | `environment-indicator` | Color-coded admin-bar badge (branch · environment type) with an Upsun Console link, a dashboard widget with environment metadata, and a matching banner on the login screen. |
 | `page-cache` | Emits `Cache-Control: public, max-age=0, s-maxage={ttl}` on anonymous, session-free page views so the Upsun router can cache them; optionally strips configured Set-Cookie headers (e.g. LMS guest sessions) to keep responses cacheable. Built-in bypass patterns cover core session cookies; commerce patterns come from the Integrations layer. `wp upsun cache-check <url>` (also a form in the dashboard Caching panel) explains any page's verdict: effective TTL, Set-Cookie spoilers, bypass-pattern matches, the route cookie allowlist (declared via `upsun_cache_check_route_cache` — Upsun does not expose it at runtime), and whether the fetch was a router HIT/MISS/BYPASS. |
@@ -158,13 +158,20 @@ Defined by the plugin, readable by consumers: `UPSUN_MU_PLUGIN_DIR` (the plugin'
 
 Module boot is deferred to `muplugins_loaded` priority 0, so **any mu-plugin** can register these regardless of load order.
 
+> **Renamed in 0.7.** Seven filters were renamed and eight per-module `*_enabled`
+> toggles were replaced by `upsun_module_enabled`. **Every old name still works**
+> — it is applied first and its result feeds the new one — and WordPress logs a
+> deprecation notice only if you actually registered a callback on it. The old
+> names are removed at 1.0; see [Deprecations](#deprecations) for the mapping.
+
 | Filter | Type | Default | Purpose |
 |---|---|---|---|
-| `upsun_mu_modules` | `array<string, class-string>` | all modules | Add/remove/replace modules. |
+| `upsun_modules` | `array<string, class-string>` | all modules | Add/remove/replace modules. |
+| `upsun_module_enabled` | `bool`, `string $id` | `true` | Toggle a single module by id (`page-cache`, `smtp`, …). The conditional counterpart to `UPSUN_DISABLE_{MODULE}`, which is read first and wins. |
+| `upsun_integration_enabled` | `bool`, `string $id` | `true` | Toggle a single integration by id (`woocommerce`, `wp-rocket`, …). Counterpart to `UPSUN_DISABLE_INTEGRATION_{ID}`. |
+| `upsun_fetcher_enabled` | `bool`, `string $id` | `true` | Toggle a built-in vendoring fetcher by id (`thimpress`, `transient`). Counterpart to `UPSUN_DISABLE_FETCHER_{ID}`. |
 | `upsun_integrations` | `array<string, class-string>` | all integrations | Add/remove/replace third-party plugin integrations. |
 | `upsun_page_cache_ttl` | `int` | `600` | Shared-cache TTL in seconds; `<= 0` disables the header. |
-| `upsun_cloudflare_enabled` | `bool` | `true` | Load the Cloudflare module (inert where Cloudflare isn't fronting, so safe to leave on everywhere). |
-| `upsun_cloudflare_restore_remote_addr` | `bool` | `false` | Rewrite `REMOTE_ADDR` from `CF-Connecting-IP` (gated on the CF ranges). **Leave off on Upsun** — the router already sets the real client IP. Only for raw-origin consumers with no IP-resolving router in front. |
 | `upsun_cloudflare_ip_ranges` | `string[]` | bundled CF v4+v6 CIDRs | Cloudflare ranges used by the raw-origin restoration path and the origin guard. Override to refresh the bundled list without a plugin release. |
 | `upsun_cloudflare_origin_secret` | `string` | `''` (from `CLOUDFLARE_ORIGIN_SECRET`) | Shared secret a CF Transform Rule injects on proxied requests. When set, production requests missing/mismatching it get a 403 (bypass guard). Empty = guard disabled. Read from an env var; never hard-code. |
 | `upsun_cloudflare_origin_secret_header` | `string` | `'HTTP_X_ORIGIN_SECRET'` | The `$_SERVER` key carrying the origin secret (i.e. `X-Origin-Secret`). |
@@ -172,7 +179,6 @@ Module boot is deferred to `muplugins_loaded` priority 0, so **any mu-plugin** c
 | `upsun_cloudflare_api_token` | `string` | `''` (from `CLOUDFLARE_API_TOKEN`) | Cloudflare API token for purge calls — scope it to Zone → Cache Purge only. |
 | `upsun_cloudflare_auto_purge` | `bool` | `false` | Purge a post's URL(s) from the Cloudflare edge when its cache is cleaned. |
 | `upsun_cloudflare_post_purge_urls` | `string[]` | `[ permalink ]` | The URLs purged for a changed post when auto-purge is on. |
-| `upsun_security_headers_enabled` | `bool` | `true` | Load the security-headers module. |
 | `upsun_security_headers` | `array<string,string>` | the baseline set (+ HSTS when applicable) | The response headers sent on the front end. Add keys (e.g. a `Content-Security-Policy`) or set one to `''` to drop it. CR/LF in values is stripped. |
 | `upsun_security_hsts` | `bool` | production only | Whether this app emits HSTS itself. Only consulted when on HTTPS and **not** fronted by Cloudflare (when fronted, HSTS is deferred to the edge regardless). |
 | `upsun_security_hsts_value` | `string` | `max-age=15552000` (180 days) | The `Strict-Transport-Security` value. Lengthen `max-age` / add `includeSubDomains`/`preload` once you're sure. |
@@ -180,42 +186,74 @@ Module boot is deferred to `muplugins_loaded` priority 0, so **any mu-plugin** c
 | `upsun_page_cache_strip_cookies` | `string[]` | `[]` | Cookie-name prefixes whose Set-Cookie headers are stripped from anonymous responses. |
 | `upsun_page_cache_skip` | `bool` | `false` | Skip cache headers for the current request (plugin-specific dynamic pages). |
 | `upsun_page_cache_debug_headers` | `bool` | `false` | Emit `X-Upsun-MU: page-cache` on cacheable responses. |
-| `upsun_environment_indicator_enabled` | `bool` | `true` | Hide the admin-bar badge and widget. |
 | `upsun_updates_notice_text` | `string` | "Updates are managed with Composer on Upsun." | The replacement auto-update copy. |
 | `upsun_site_health_tests` | `array` | built-in checks | Add/remove health checks (shared with `wp upsun doctor`). |
 | `upsun_preview_noindex` | `bool` | `true` | Disable noindex on non-production (e.g. an indexable staging domain). |
 | `upsun_configure_smtp` | `bool` | `true` | Keep the plugin away from PHPMailer (a mailer plugin owns SMTP). |
-| `upsun_dashboard_enabled` | `bool` | `true` | Hide the "Upsun" wp-admin page. |
 | `upsun_dashboard_panels` | `array<string, {title, render, context?}>` | 5 built-in panels | Add/remove dashboard panels. `context` (`normal` \| `side` \| `column3` \| `column4`, default `normal`) sets the initial column; users can drag panels anywhere and their layout persists. |
 | `upsun_dashboard_menu_position` | `int` | `2` | Admin-menu position. The default is *pinned* directly below Dashboard after all plugins register (several plugins squat the top slot, and core breaks the ties with a hash lottery); any other value is passed to `add_menu_page` unpinned. |
 | `upsun_dashboard_menu_icon` | `string` | Upsun mark (base64 SVG) | Menu icon: a data URI, image URL, or dashicon class. |
-| `upsun_login_banner` | `bool` | `true` | Hide the login-screen environment banner. |
-| `upsun_cron_heartbeat_enabled` | `bool` | `true` | Disable the heartbeat event and its check. |
+| `upsun_environment_indicator_login_banner` | `bool` | `true` | Hide the login-screen environment banner. |
 | `upsun_cron_heartbeat_schedule` | `string` | `'hourly'` | WP-Cron schedule for the heartbeat event (staleness thresholds scale with it). |
-| `upsun_safe_previews_enabled` | `bool` | `true` | Disable preview safety entirely (protections, stamp, check, panel). |
 | `upsun_safe_previews_mail` | `string` | `'intercept'` | Preview mail policy: `intercept` (log, never send), `allow`, or `redirect:qa@example.com`. Malformed values fail safe to intercept. Complements (does not replace) the platform's own "Outgoing emails" toggle: Upsun blocks its SMTP proxy on previews by default, but that toggle never reaches external SMTP/API mailer plugins configured in the cloned data — `wp_mail` interception covers those too. The Preview safety status reports both layers. |
-| `upsun_safe_previews_stripe_test_mode` | `bool` | `true` | Stop forcing WooCommerce Stripe into test mode on previews. |
-| `upsun_safe_previews_pause_webhooks` | `bool` | `true` | Stop pausing WooCommerce webhook deliveries on previews. |
+| `upsun_woocommerce_stripe_test_mode` | `bool` | `true` | Stop forcing WooCommerce Stripe into test mode on previews. |
+| `upsun_woocommerce_pause_webhooks` | `bool` | `true` | Stop pausing WooCommerce webhook deliveries on previews. |
 | `upsun_safe_previews_actions` | `array<string, {label, register, status}>` | 3 built-in protections | Add protections for your own integrations (CRMs, other gateways) or remove built-ins. `register` runs at `muplugins_loaded` on previews; `status` at render time. |
 | `upsun_safe_previews_boot_check` | `bool` | `false` | Fallback for projects that cannot edit their hooks: check the environment stamp on every boot and sanitize inline when it is stale. Prefer the post_deploy hook. |
 | `upsun_cache_check_route_cache` | `array{enabled, default_ttl, cookies, known}` | documented router defaults | Mirror your route's cache block from `.upsun/config.yaml` (set `known: true`) so `wp upsun cache-check` reports your real cookie allowlist — Upsun does not expose it at runtime. |
-| `upsun_writable_paths_enabled` | `bool` | `true` | Disable the writable-path advisor check. |
 | `upsun_preview_sanitizers` | `array<string, {label, enabled, run}>` | 4 built-ins, all disabled | Add your own DB-writing sanitizers (idempotent, dry-run aware) or remove built-ins. They run inside the sanitize flow, before `upsun_preview_sanitize`. |
 | `upsun_sanitize_anonymize_user_emails` | `bool` | `false` | Rewrite every user email to `user-{ID}@upsun-preview.invalid` on sanitize (one idempotent UPDATE; usernames keep working for login). |
-| `upsun_sanitize_anonymize_passwords` | `bool\|string` | `false` | `true` sets every password to `password`; a template like `'password-{ID}'` gives per-user passwords (legacy-MD5 hashes, rehashed by WP on first login). **Pair with Upsun's HTTP access control** — known passwords on a reachable preview are a door. |
+| `upsun_sanitize_anonymize_user_passwords` | `bool\|string` | `false` | `true` sets every password to `password`; a template like `'password-{ID}'` gives per-user passwords (legacy-MD5 hashes, rehashed by WP on first login). **Pair with Upsun's HTTP access control** — known passwords on a reachable preview are a door. |
 | `upsun_sanitize_preserved_emails` | `string[]` | `[]` | Users exempt from BOTH anonymizers: exact addresses or `'@domain'` suffixes. |
 | `upsun_sanitize_deactivate_plugins` | `string[]` | `[]` | Plugin basenames deactivated on sanitize (empty = disabled). |
 | `upsun_sanitize_scrub_options` | `array<string, mixed>` | `[]` | Options scrubbed on sanitize: option name (optionally with a dotted sub-key path like `gateway_settings.live_secret_key`) => replacement; `null` deletes/unsets. |
 | `upsun_migrations_dir` | `?string` | `UPSUN_MIGRATIONS_DIR` constant | Directory of deploy migrations; null = feature idle. |
-| `upsun_mount_usage_enabled` | `bool` | `true` | Disable the daily mount measurement and the "Disk & mounts" panel. |
-| `upsun_disk_usage_thresholds` | `array{int, int}` | `[80, 95]` | Used-percent thresholds for the disk-usage check (warn, fail). |
-| `upsun_writable_path_requirements` | `array<string, {label, active, paths, note?}>` | contributed by Integrations | Declare where a plugin writes (paths relative to wp-content; `active` evaluated at check time). The check and `wp upsun mounts` do the rest. |
+| `upsun_mount_usage_thresholds` | `array{int, int}` | `[80, 95]` | Used-percent thresholds for the disk-usage check (warn, fail). |
+| `upsun_writable_paths_requirements` | `array<string, {label, active, paths, note?}>` | contributed by Integrations | Declare where a plugin writes (paths relative to wp-content; `active` evaluated at check time). The check and `wp upsun mounts` do the rest. |
 
 ### Actions
 
 | Action | When it fires |
 |---|---|
 | `upsun_preview_sanitize` (`?string $previous, string $current`) | When `wp upsun sanitize` runs (typically `--if-needed` from the post_deploy hook after a clone or data sync, detected via the `upsun_environment_stamp` option), from the dashboard "Run sanitize actions now" button, or at boot if `upsun_safe_previews_boot_check` is enabled. Scrub or reconfigure site-specific integrations here; callbacks must be idempotent. |
+
+### Deprecations
+
+0.7 was the last pre-1.0 window for breaking changes, so the filter names that
+were wrong were fixed rather than frozen. **Nothing breaks now:** each old name
+is applied first and its result feeds the canonical one, so a callback on the old
+name still decides unless something also registers the new one. WordPress emits a
+deprecation notice through `_deprecated_hook()` when a callback is attached to an
+old name **and `WP_DEBUG` is on** — so you see these on a debug environment, and
+sites that never used them see nothing either way.
+
+| Removed at 1.0 | Use instead | Why |
+|---|---|---|
+| `upsun_mu_modules` | `upsun_modules` | "mu" is a delivery detail, and it was the only registry filter carrying it |
+| `upsun_writable_path_requirements` | `upsun_writable_paths_requirements` | singular/plural mismatch with its own module |
+| `upsun_disk_usage_thresholds` | `upsun_mount_usage_thresholds` | the prefix named neither its module nor a shared concept |
+| `upsun_login_banner` | `upsun_environment_indicator_login_banner` | bare name read as global; it belongs to that module |
+| `upsun_sanitize_anonymize_passwords` | `upsun_sanitize_anonymize_user_passwords` | its sibling is `..._anonymize_user_emails` |
+| `upsun_safe_previews_pause_webhooks` | `upsun_woocommerce_pause_webhooks` | declared by the WooCommerce integration, not the module |
+| `upsun_safe_previews_stripe_test_mode` | `upsun_woocommerce_stripe_test_mode` | same |
+| `upsun_cloudflare_enabled`, `upsun_security_headers_enabled`, `upsun_environment_indicator_enabled`, `upsun_dashboard_enabled`, `upsun_cron_heartbeat_enabled`, `upsun_safe_previews_enabled`, `upsun_writable_paths_enabled`, `upsun_mount_usage_enabled` | `upsun_module_enabled` (`bool $enabled, string $id`) | eight of thirteen modules had one, so five had no conditional switch at all |
+
+Migrating a per-module toggle:
+
+```php
+// Before
+add_filter( 'upsun_dashboard_enabled', '__return_false' );
+
+// After
+add_filter( 'upsun_module_enabled', fn ( $enabled, $id ) => 'dashboard' !== $id && $enabled, 10, 2 );
+```
+
+**Removed outright in 0.7:** `upsun_cloudflare_restore_remote_addr`, and with it
+the `REMOTE_ADDR` rewriting it gated and the `$_SERVER['UPSUN_ORIGINAL_REMOTE_ADDR']`
+key it wrote. The Upsun router resolves the real client IP before PHP runs, so on
+this platform the filter's only reachable effect was letting a forged
+`CF-Connecting-IP` override a correct value on a direct origin hit. The
+`cloudflare` module verifies the client IP (health check) instead of rewriting it.
 
 ### Deploy migrations
 
@@ -367,8 +405,9 @@ A second suite runs against **real WordPress and a real database**: it builds a
 throwaway consumer project the way
 [Installation](#installation-composer-managed-wordpress) describes,
 installs WordPress, and asserts the off-platform no-op, on-platform module boot,
-the `UPSUN_MU_DISABLE` kill switch, the `wp upsun` commands, and the response
-headers the modules emit — over HTTP, through the PHP built-in server.
+the deprecation notices core emits for the 0.7 renames (with `WP_DEBUG` on), the
+`UPSUN_MU_DISABLE` kill switch, the `wp upsun` commands, and the response headers
+the modules emit — over HTTP, through the PHP built-in server.
 
 ```
 docker run --rm -d -p 3306:3306 -e MARIADB_ROOT_PASSWORD=root \

@@ -194,6 +194,34 @@ $again = Upsun\Sanitizers::run( false );
 
 it_contains( 'a second run anonymizes nothing', 'anonymized 0', implode( ' | ', $again ) );
 
+it_section( 'Deprecation shims against real WordPress' );
+
+// The reason the harness had to land before the renames: the shims call
+// apply_filters_deprecated(), which is core and absent from the unit stubs.
+// Here it is the real function. The notice itself needs WP_DEBUG, so it is
+// asserted in deprecations.php; this covers the values.
+it_ok( 'apply_filters_deprecated() is the real core function', function_exists( 'apply_filters_deprecated' ) );
+
+add_filter( 'upsun_mount_usage_thresholds', static fn () => array( 1, 2 ) );
+it_same( 'the canonical name is honoured', 'fail', Upsun\Modules\MountUsage::verdict( 100, 50 ) );
+remove_all_filters( 'upsun_mount_usage_thresholds' );
+
+add_filter( 'upsun_disk_usage_thresholds', static fn () => array( 1, 2 ) );
+it_same( 'the deprecated name still decides', 'fail', Upsun\Modules\MountUsage::verdict( 100, 50 ) );
+remove_all_filters( 'upsun_disk_usage_thresholds' );
+
+// The generic toggle, through a real registry boot.
+add_filter( 'upsun_module_enabled', static fn ( $enabled, $id ) => 'page-cache' !== $id, 10, 2 );
+Upsun\ModuleRegistry::boot();
+
+it_same( 'upsun_module_enabled gates a module the old filters never covered', 'disabled', Upsun\ModuleRegistry::status()['page-cache']['state'] ?? '' );
+it_same( 'other modules still boot', 'loaded', Upsun\ModuleRegistry::status()['site-health']['state'] ?? '' );
+
+remove_all_filters( 'upsun_module_enabled' );
+Upsun\ModuleRegistry::boot();
+
+it_same( 'and the registry recovers when it is removed', 'loaded', Upsun\ModuleRegistry::status()['page-cache']['state'] ?? '' );
+
 it_section( 'Preview mail interception' );
 
 // Real wp_mail with no transport configured returns false; the safe-previews

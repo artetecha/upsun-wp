@@ -161,11 +161,14 @@ final class MountUsageTest extends TestCase {
 		$this->assertStringContainsString( 'ago', $result['message'] );
 	}
 
-	public function test_enabled_filter_gates_should_load(): void {
+	/**
+	 * Boot gating moved to ModuleRegistry in 0.7; see ModuleRegistryTest.
+	 */
+	public function test_should_load_is_unconditional(): void {
 		$this->assertTrue( ( new MountUsage() )->should_load() );
 
 		add_filter( 'upsun_mount_usage_enabled', '__return_false' );
 
-		$this->assertFalse( ( new MountUsage() )->should_load() );
+		$this->assertTrue( ( new MountUsage() )->should_load() );
 	}
 }

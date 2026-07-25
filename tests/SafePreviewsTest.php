@@ -33,12 +33,15 @@ final class SafePreviewsTest extends TestCase {
 		\Upsun\Environment::reset();
 	}
 
-	public function test_enabled_filter_gates_should_load(): void {
+	/**
+	 * Boot gating moved to ModuleRegistry in 0.7; see ModuleRegistryTest.
+	 */
+	public function test_should_load_is_unconditional(): void {
 		$this->assertTrue( ( new SafePreviews() )->should_load() );
 
 		add_filter( 'upsun_safe_previews_enabled', '__return_false' );
 
-		$this->assertFalse( ( new SafePreviews() )->should_load() );
+		$this->assertTrue( ( new SafePreviews() )->should_load() );
 	}
 
 	/* Mail policy. */

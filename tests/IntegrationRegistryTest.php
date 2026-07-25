@@ -102,6 +102,34 @@ final class IntegrationRegistryTest extends TestCase {
 		$this->assertSame( 'filter', $status['woocommerce-stripe']['state'] );
 	}
 
+	/**
+	 * The conditional counterpart to UPSUN_DISABLE_INTEGRATION_{ID}, added in
+	 * 0.7 so the three extensible things (modules, integrations, fetchers) all
+	 * have both a constant family and a filter.
+	 */
+	public function test_integration_enabled_filter_disables_by_id(): void {
+		$this->on_platform();
+
+		add_filter( 'upsun_integrations', fn () => array( 'target' => UpsunTestIntegration::class ) );
+		add_filter( 'upsun_integration_enabled', fn ( $enabled, $id ) => 'target' !== $id, 10, 2 );
+
+		IntegrationRegistry::boot();
+
+		$this->assertSame( 0, UpsunTestIntegration::$registered );
+		$this->assertSame( 'disabled', IntegrationRegistry::status()['target']['state'] );
+	}
+
+	public function test_integration_enabled_filter_leaves_other_ids_alone(): void {
+		$this->on_platform();
+
+		add_filter( 'upsun_integrations', fn () => array( 'target' => UpsunTestIntegration::class ) );
+		add_filter( 'upsun_integration_enabled', fn ( $enabled, $id ) => 'other' !== $id, 10, 2 );
+
+		IntegrationRegistry::boot();
+
+		$this->assertSame( 1, UpsunTestIntegration::$registered );
+	}
+
 	public function test_constant_disables_an_integration(): void {
 		$this->on_platform();
 

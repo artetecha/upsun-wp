@@ -13,15 +13,17 @@ if ( PHP_SAPI !== 'cli' ) {
 ini_set( 'error_log', sys_get_temp_dir() . '/upsun-mu-plugin-tests.log' );
 
 // Minimal hook system: enough for apply_filters/add_filter round-trips.
-$GLOBALS['upsun_test_filters'] = array();
-$GLOBALS['upsun_test_actions'] = array();
-$GLOBALS['upsun_test_fired']   = array();
+$GLOBALS['upsun_test_filters']    = array();
+$GLOBALS['upsun_test_actions']    = array();
+$GLOBALS['upsun_test_fired']      = array();
+$GLOBALS['upsun_test_deprecated'] = array();
 
 function upsun_test_reset_hooks(): void {
 	$GLOBALS['upsun_test_filters']    = array();
 	$GLOBALS['upsun_test_actions']    = array();
 	$GLOBALS['upsun_test_fired']      = array();
 	$GLOBALS['upsun_test_meta_boxes'] = array();
+	$GLOBALS['upsun_test_deprecated'] = array();
 }
 
 function add_filter( $hook, $callback, $priority = 10, $accepted_args = 1 ) {
@@ -51,6 +53,30 @@ function do_action( $hook, ...$args ) {
 
 function has_action( $hook, $callback = false ) {
 	return ! empty( $GLOBALS['upsun_test_actions'][ $hook ] );
+}
+
+function has_filter( $hook, $callback = false ) {
+	return ! empty( $GLOBALS['upsun_test_filters'][ $hook ] );
+}
+
+/**
+ * Mirrors core: the notice fires only when something is actually listening on
+ * the old name, and the old callbacks still get to filter the value. Tests read
+ * $GLOBALS['upsun_test_deprecated'] to assert the notice, since PHPUnit cannot
+ * see core's _deprecated_hook().
+ */
+function apply_filters_deprecated( $hook, $args, $version, $replacement = '', $message = '' ) {
+	if ( ! has_filter( $hook ) ) {
+		return $args[0];
+	}
+
+	$GLOBALS['upsun_test_deprecated'][ $hook ] = array(
+		'version'     => $version,
+		'replacement' => $replacement,
+		'message'     => $message,
+	);
+
+	return apply_filters( $hook, ...$args );
 }
 
 function __return_true() {
@@ -261,6 +287,7 @@ function wp_is_writable( $path ) {
 	return is_writable( (string) $path );
 }
 
+require_once dirname( __DIR__ ) . '/src/Deprecations.php';
 require_once dirname( __DIR__ ) . '/src/Environment.php';
 require_once dirname( __DIR__ ) . '/src/helpers.php';
 require_once dirname( __DIR__ ) . '/src/CacheCheck.php';

@@ -104,17 +104,34 @@ final class CloudflareTest extends TestCase {
 		);
 	}
 
-	public function test_restore_client_ip_mutates_superglobal_and_preserves_original(): void {
+	/**
+	 * 0.7 removed the opt-in REMOTE_ADDR restoration (and the
+	 * upsun_cloudflare_restore_remote_addr filter that gated it): the router
+	 * already resolves the real client IP, so the only reachable effect on
+	 * Upsun was letting a forged CF-Connecting-IP override a correct value on
+	 * a direct origin hit. Registering the module must not touch REMOTE_ADDR,
+	 * even with the old filter present and the headers that used to trigger it.
+	 */
+	public function test_register_never_rewrites_remote_addr(): void {
 		$_SERVER['REMOTE_ADDR']           = '162.158.1.1';
 		$_SERVER['HTTP_CF_CONNECTING_IP'] = '198.51.100.9';
 		$_SERVER['HTTP_CF_VISITOR']       = '{"scheme":"https"}';
 		unset( $_SERVER['HTTPS'] );
 
-		( new Cloudflare() )->restore_client_ip();
+		add_filter( 'upsun_cloudflare_restore_remote_addr', '__return_true' );
 
-		$this->assertSame( '198.51.100.9', $_SERVER['REMOTE_ADDR'] );
-		$this->assertSame( '162.158.1.1', $_SERVER['UPSUN_ORIGINAL_REMOTE_ADDR'] );
-		$this->assertSame( 'on', $_SERVER['HTTPS'] );
+		( new Cloudflare() )->register();
+
+		$this->assertSame( '162.158.1.1', $_SERVER['REMOTE_ADDR'] );
+		$this->assertArrayNotHasKey( 'UPSUN_ORIGINAL_REMOTE_ADDR', $_SERVER );
+		$this->assertArrayNotHasKey( 'HTTPS', $_SERVER );
+	}
+
+	/**
+	 * The capability is gone, not merely unhooked.
+	 */
+	public function test_restoration_method_no_longer_exists(): void {
+		$this->assertFalse( method_exists( Cloudflare::class, 'restore_client_ip' ) );
 	}
 
 	/* ---- Scheme detection -------------------------------------------- */

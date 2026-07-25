@@ -25,8 +25,30 @@ final class ModuleRegistry {
 	);
 
 	/**
+	 * The per-module boot filters replaced by upsun_module_enabled in 0.7.
+	 *
+	 * They covered eight of thirteen modules, so a consumer wanting a
+	 * conditional (per-environment) toggle could have one for eight modules
+	 * and had to fall back to a wp-config constant for the other five. The
+	 * generic filter covers all thirteen; these are honoured through
+	 * Deprecations until 1.0.
+	 *
+	 * @var array<string, string> module id => deprecated filter name.
+	 */
+	private const TOGGLES = array(
+		'cloudflare'            => 'upsun_cloudflare_enabled',
+		'security-headers'      => 'upsun_security_headers_enabled',
+		'environment-indicator' => 'upsun_environment_indicator_enabled',
+		'dashboard'             => 'upsun_dashboard_enabled',
+		'cron-heartbeat'        => 'upsun_cron_heartbeat_enabled',
+		'safe-previews'         => 'upsun_safe_previews_enabled',
+		'writable-paths'        => 'upsun_writable_paths_enabled',
+		'mount-usage'           => 'upsun_mount_usage_enabled',
+	);
+
+	/**
 	 * Per-module outcome of the last boot: id => [ class, state ].
-	 * States: loaded | constant | filter | missing | declined.
+	 * States: loaded | constant | filter | disabled | missing | declined.
 	 *
 	 * @var array<string, array{class: string, state: string}>
 	 */
@@ -40,8 +62,9 @@ final class ModuleRegistry {
 	 * 2. Off-platform: no-op (UPSUN_MU_FORCE overrides, for local/CI testing
 	 *    of individual modules against faked PLATFORM_* variables).
 	 * 3. Per-module UPSUN_DISABLE_{MODULE} constants (wp-config friendly).
-	 * 4. The upsun_mu_modules filter (for other mu-plugins).
-	 * 5. Each module's own should_load().
+	 * 4. The upsun_modules filter, for removing or adding modules wholesale.
+	 * 5. The upsun_module_enabled filter, for toggling one by id.
+	 * 6. Each module's own should_load().
 	 *
 	 * @internal
 	 */
@@ -61,7 +84,7 @@ final class ModuleRegistry {
 		 *
 		 * @param array<string, class-string<Module>> $modules id => class.
 		 */
-		$modules = (array) apply_filters( 'upsun_mu_modules', self::MODULES );
+		$modules = (array) Deprecations::filter( 'upsun_modules', 'upsun_mu_modules', self::MODULES );
 
 		// Defaults absent from the filtered map were removed by a consumer.
 		foreach ( array_diff_key( self::MODULES, $modules ) as $id => $class ) {
@@ -79,6 +102,14 @@ final class ModuleRegistry {
 				self::$status[ $id ] = array(
 					'class' => $class,
 					'state' => 'constant',
+				);
+				continue;
+			}
+
+			if ( ! self::enabled_by_filter( $id ) ) {
+				self::$status[ $id ] = array(
+					'class' => $class,
+					'state' => 'disabled',
 				);
 				continue;
 			}
@@ -123,6 +154,40 @@ final class ModuleRegistry {
 	 */
 	public static function disable_constant_name( string $id ): string {
 		return 'UPSUN_DISABLE_' . strtoupper( str_replace( '-', '_', $id ) );
+	}
+
+	/**
+	 * Whether a module is enabled by filter — the conditional counterpart to
+	 * the UPSUN_DISABLE_{MODULE} constants, available for every module.
+	 */
+	private static function enabled_by_filter( string $id ): bool {
+		$enabled = true;
+
+		if ( isset( self::TOGGLES[ $id ] ) ) {
+			// The module's own pre-0.7 toggle, honoured until 1.0. Its result
+			// feeds the generic filter below, so a consumer registering only
+			// the old name still decides.
+			$enabled = (bool) apply_filters_deprecated(
+				self::TOGGLES[ $id ],
+				array( $enabled ),
+				Deprecations::SINCE,
+				'upsun_module_enabled'
+			);
+		}
+
+		/**
+		 * Filters whether a single module boots, by id (the ids are the keys
+		 * of the upsun_modules map: 'page-cache', 'smtp', ...).
+		 *
+		 * Use for conditional gating — per environment type, per hostname —
+		 * where a wp-config constant cannot express the condition. For an
+		 * unconditional switch prefer UPSUN_DISABLE_{MODULE}, which is read
+		 * before this filter and wins.
+		 *
+		 * @param bool   $enabled Default true.
+		 * @param string $id      Module id.
+		 */
+		return (bool) apply_filters( 'upsun_module_enabled', $enabled, $id );
 	}
 
 	private static function disabled_by_constant( string $id ): bool {
