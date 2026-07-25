@@ -77,31 +77,24 @@ class Cloudflare implements Module {
 	private const API_BASE = 'https://api.cloudflare.com/client/v4';
 
 	public function should_load(): bool {
-		/**
-		 * Filters whether the Cloudflare module loads. On by default: the
-		 * IP restoration self-gates on the Cloudflare ranges, so it is inert
-		 * on environments Cloudflare does not front (previews, direct origin
-		 * hits) and safe to leave enabled everywhere.
-		 *
-		 * @param bool $enabled Default true.
-		 */
-		return (bool) apply_filters( 'upsun_cloudflare_enabled', true );
+		// Boot gating belongs to the registry: UPSUN_DISABLE_CLOUDFLARE and
+		// the upsun_module_enabled filter are applied there, uniformly for
+		// every module rather than the eight that happened to have one.
+		return true;
 	}
 
 	public function register(): void {
-		// On Upsun the router resolves the real client IP before PHP runs, so
-		// REMOTE_ADDR is already the visitor (verified: REMOTE_ADDR ==
-		// CF-Connecting-IP == X-Client-IP, and Cloudflare's edge never appears
-		// in REMOTE_ADDR/XFF). Rewriting it from CF-Connecting-IP is therefore
-		// redundant here — and worse, on a direct hit to the *.platformsh.site
-		// origin it would let a forged header override the router's correct
-		// value. So restoration is OFF by default and only meant for raw-origin
-		// consumers (no client-IP-resolving router in front). Opt in with the
-		// filter below.
-		if ( apply_filters( 'upsun_cloudflare_restore_remote_addr', false ) ) {
-			$this->restore_client_ip();
-		}
-
+		// No client-IP restoration here, by design: on Upsun the router
+		// resolves the real client IP before PHP runs, so REMOTE_ADDR is
+		// already the visitor (verified: REMOTE_ADDR == CF-Connecting-IP ==
+		// X-Client-IP, and Cloudflare's edge never appears in REMOTE_ADDR/XFF).
+		// Rewriting it from CF-Connecting-IP would be redundant — and on a
+		// direct hit to the *.platformsh.site origin it would let a forged
+		// header override the router's correct value. The 0.7 API audit removed
+		// the opt-in filter that did this: its only reachable effect on the one
+		// platform this plugin supports was that downgrade. This module
+		// verifies the client IP (see the health check) rather than rewriting
+		// it. resolve_client_ip() remains for that reporting.
 		add_action( 'init', array( $this, 'maybe_block_direct_origin' ), 0 );
 		add_filter( 'upsun_site_health_tests', array( $this, 'add_health_check' ) );
 		add_filter( 'upsun_dashboard_panels', array( $this, 'add_dashboard_panel' ) );
@@ -268,27 +261,6 @@ class Cloudflare implements Module {
 	public static function is_fronted( array $server ): bool {
 		return '' !== (string) ( $server['HTTP_CF_RAY'] ?? '' )
 			|| '' !== (string) ( $server['HTTP_CF_CONNECTING_IP'] ?? '' );
-	}
-
-	/**
-	 * Apply resolve_client_ip()/resolve_scheme() to the live superglobals.
-	 * The original REMOTE_ADDR is preserved under UPSUN_ORIGINAL_REMOTE_ADDR.
-	 */
-	public function restore_client_ip(): void {
-		$ranges    = self::trusted_ranges();
-		$client_ip = self::resolve_client_ip( $_SERVER, $ranges );
-
-		if ( null === $client_ip ) {
-			return;
-		}
-
-		$_SERVER['UPSUN_ORIGINAL_REMOTE_ADDR'] = $_SERVER['REMOTE_ADDR'] ?? '';
-		$_SERVER['REMOTE_ADDR']                = $client_ip;
-
-		if ( 'https' === self::resolve_scheme( $_SERVER ) ) {
-			$_SERVER['HTTPS']                  = 'on';
-			$_SERVER['HTTP_X_FORWARDED_PROTO'] = 'https';
-		}
 	}
 
 	/* ---------------------------------------------------------------------

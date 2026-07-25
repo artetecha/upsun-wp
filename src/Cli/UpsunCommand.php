@@ -527,7 +527,7 @@ class UpsunCommand {
 	 *
 	 * Lists the mounts declared in the Upsun configuration (read from
 	 * PLATFORM_APPLICATION), then checks the writable-path requirements of
-	 * known active plugins (the upsun_writable_path_requirements registry)
+	 * known active plugins (the upsun_writable_paths_requirements registry)
 	 * and prints ready-to-paste mount YAML for anything not covered.
 	 *
 	 * ## OPTIONS

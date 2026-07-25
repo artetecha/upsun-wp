@@ -7,18 +7,17 @@
 
 namespace Upsun\Modules;
 
+use Upsun\Deprecations;
 use Upsun\Environment;
 use Upsun\Module;
 
 class EnvironmentIndicator implements Module {
 
 	public function should_load(): bool {
-		/**
-		 * Filters whether the environment indicator is shown.
-		 *
-		 * @param bool $enabled Default true.
-		 */
-		return (bool) apply_filters( 'upsun_environment_indicator_enabled', true );
+		// Boot gating belongs to the registry: UPSUN_DISABLE_ENVIRONMENT_INDICATOR and
+		// the upsun_module_enabled filter are applied there, uniformly for
+		// every module rather than the eight that happened to have one.
+		return true;
 	}
 
 	/**
@@ -57,7 +56,7 @@ class EnvironmentIndicator implements Module {
 		 *
 		 * @param bool $enabled Default true.
 		 */
-		if ( ! (bool) apply_filters( 'upsun_login_banner', true ) ) {
+		if ( ! (bool) Deprecations::filter( 'upsun_environment_indicator_login_banner', 'upsun_login_banner', true ) ) {
 			return $message;
 		}
 

@@ -8,6 +8,7 @@
 
 namespace Upsun\Integrations;
 
+use Upsun\Deprecations;
 use Upsun\Integration;
 
 class WooCommerceStripe implements Integration {
@@ -63,7 +64,7 @@ class WooCommerceStripe implements Integration {
 		if ( ! $this->test_mode_forced() ) {
 			return array(
 				'state'  => 'off',
-				'detail' => __( 'not forced (upsun_safe_previews_stripe_test_mode filter)', 'upsun-mu-plugin' ),
+				'detail' => __( 'not forced (upsun_woocommerce_stripe_test_mode filter)', 'upsun-mu-plugin' ),
 			);
 		}
 
@@ -87,6 +88,10 @@ class WooCommerceStripe implements Integration {
 		 *
 		 * @param bool $forced Default true.
 		 */
-		return (bool) apply_filters( 'upsun_safe_previews_stripe_test_mode', true );
+		return (bool) Deprecations::filter(
+			'upsun_woocommerce_stripe_test_mode',
+			'upsun_safe_previews_stripe_test_mode',
+			true
+		);
 	}
 }

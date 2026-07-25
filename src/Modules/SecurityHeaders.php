@@ -45,12 +45,10 @@ class SecurityHeaders implements Module {
 	public const HSTS_DEFAULT = 'max-age=15552000';
 
 	public function should_load(): bool {
-		/**
-		 * Filters whether the security-headers module loads.
-		 *
-		 * @param bool $enabled Default true.
-		 */
-		return (bool) apply_filters( 'upsun_security_headers_enabled', true );
+		// Boot gating belongs to the registry: UPSUN_DISABLE_SECURITY_HEADERS and
+		// the upsun_module_enabled filter are applied there, uniformly for
+		// every module rather than the eight that happened to have one.
+		return true;
 	}
 
 	public function register(): void {

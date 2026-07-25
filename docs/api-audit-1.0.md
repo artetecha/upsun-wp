@@ -3,6 +3,44 @@
 Audited against `main` @ `5c5a009` (0.6.0). Every count below is reproducible from
 the repo; the commands are given in "Method" at the end.
 
+## Status: executed in 0.7
+
+The recommendations below shipped, with two deviations found while implementing
+them. This section is the record; the body is left as written so the reasoning
+behind each verdict stays reviewable.
+
+| Step | Shipped in | Note |
+|---|---|---|
+| `@internal` on the ~40 non-allowlist statics | #10 | `Environment` fenced at class level |
+| One application point per multi-site filter | #10 | 4 filters, `@internal` accessors |
+| WP integration harness + PHP × WP matrix | #11 | Prerequisite for the shims below |
+| 7 renames, shimmed | 0.7.0 | §1a, §1e — **6, not 7, of the listed names** |
+| Generic `upsun_{module,integration,fetcher}_enabled` | 0.7.0 | §1b |
+| `upsun_cloudflare_restore_remote_addr` removed | 0.7.0 | §1d, unshimmed |
+
+**Deviation 1 — `upsun_configure_smtp` was not renamed.** §1e recommended
+`upsun_smtp_enabled`, reading it as a boot gate with a verb name. It is not one:
+it is applied inside `Smtp::configure()` on every `phpmailer_init`, deciding
+whether to wire PHPMailer to the relay for *this* send. Renaming it to `*_enabled`
+would have made a per-send decision look like the module toggle that now lives in
+the registry. It keeps its name; a consumer (keds-upsun) also uses it.
+
+**Deviation 2 — the blast radius was measured, not assumed.** §7 suggested
+grepping the consumer repos before the renames. Done across `keds-ecampus`,
+`keds-jcs-wordpress`, `keds-upsun` and `wordpress-upsun-starter`, excluding
+vendored copies of this plugin: consumer code uses `upsun_page_cache_skip`,
+`_ttl`, `_strip_cookies`, `upsun_cache_check_route_cache`,
+`upsun_safe_previews_mail`, `upsun_safe_previews_actions`,
+`upsun_sanitize_preserved_emails`, `upsun_configure_smtp`, and the helper
+`Upsun\is_preview_environment()`. **None of the renamed names, and no direct
+`Upsun\Environment::` call** — so the shims can be dropped at 1.0 as planned, and
+fencing `Environment` in #10 declared nothing in use unsupported.
+
+Also fixed in passing: `UPSUN_DISABLE_FETCHER_TRANSIENT`, documented in §2 as part
+of the constant surface, was never read — `Vendor::fetchers()` appended the
+fallback unconditionally. It is now honoured, alongside the new
+`upsun_fetcher_enabled` filter.
+
 ## Corrected inventory
 
 The earlier read undercounted. Actuals:

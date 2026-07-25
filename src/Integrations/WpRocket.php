@@ -23,7 +23,7 @@ class WpRocket implements Integration {
 	}
 
 	public function register(): void {
-		add_filter( 'upsun_writable_path_requirements', array( $this, 'add_requirements' ), 5 );
+		add_filter( 'upsun_writable_paths_requirements', array( $this, 'add_requirements' ), 5 );
 	}
 
 	public function add_requirements( array $requirements ): array {

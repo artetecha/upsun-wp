@@ -8,7 +8,7 @@
  * is a three-line mount, not a runtime path redirection. What's missing is
  * discovery: plugins fail or nag before anyone knows which directory they
  * wanted. This module closes that gap: Integrations declare where known
- * plugins write (upsun_writable_path_requirements), the shared check
+ * plugins write (upsun_writable_paths_requirements), the shared check
  * compares that against the mounts in PLATFORM_APPLICATION, and
  * doctor/Site Health/`wp upsun mounts` print the exact YAML to add.
  *
@@ -20,18 +20,17 @@
 
 namespace Upsun\Modules;
 
+use Upsun\Deprecations;
 use Upsun\Environment;
 use Upsun\Module;
 
 class WritablePaths implements Module {
 
 	public function should_load(): bool {
-		/**
-		 * Filters whether the writable-path advisor is active.
-		 *
-		 * @param bool $enabled Default true.
-		 */
-		return (bool) apply_filters( 'upsun_writable_paths_enabled', true );
+		// Boot gating belongs to the registry: UPSUN_DISABLE_WRITABLE_PATHS and
+		// the upsun_module_enabled filter are applied there, uniformly for
+		// every module rather than the eight that happened to have one.
+		return true;
 	}
 
 	public function register(): void {
@@ -52,7 +51,11 @@ class WritablePaths implements Module {
 		 *
 		 * @param array $requirements id => [ 'label', 'active', 'paths', 'note' ].
 		 */
-		return (array) apply_filters( 'upsun_writable_path_requirements', array() );
+		return (array) Deprecations::filter(
+			'upsun_writable_paths_requirements',
+			'upsun_writable_path_requirements',
+			array()
+		);
 	}
 
 	public function add_check( array $checks ): array {

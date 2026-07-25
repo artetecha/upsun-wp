@@ -22,12 +22,10 @@ class CronHeartbeat implements Module {
 	private const DEFAULT_INTERVAL = 3600; // The 'hourly' schedule.
 
 	public function should_load(): bool {
-		/**
-		 * Filters whether the cron heartbeat is scheduled and checked.
-		 *
-		 * @param bool $enabled Default true.
-		 */
-		return (bool) apply_filters( 'upsun_cron_heartbeat_enabled', true );
+		// Boot gating belongs to the registry: UPSUN_DISABLE_CRON_HEARTBEAT and
+		// the upsun_module_enabled filter are applied there, uniformly for
+		// every module rather than the eight that happened to have one.
+		return true;
 	}
 
 	public function register(): void {

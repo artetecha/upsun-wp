@@ -45,12 +45,10 @@ class SafePreviews implements Module {
 	private const MAIL_LOG_MAX = 20;
 
 	public function should_load(): bool {
-		/**
-		 * Filters whether preview safety is active.
-		 *
-		 * @param bool $enabled Default true.
-		 */
-		return (bool) apply_filters( 'upsun_safe_previews_enabled', true );
+		// Boot gating belongs to the registry: UPSUN_DISABLE_SAFE_PREVIEWS and
+		// the upsun_module_enabled filter are applied there, uniformly for
+		// every module rather than the eight that happened to have one.
+		return true;
 	}
 
 	public function register(): void {

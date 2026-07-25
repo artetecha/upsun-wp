@@ -50,12 +50,10 @@ class Dashboard implements Module {
 	private const MENU_ICON_SVG = '<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16.0064 10.3029C19.1584 10.3029 21.7066 12.8576 21.7066 16.0032H27.4069C27.4069 9.70559 22.3029 4.59625 16 4.59625C9.69702 4.59625 4.59302 9.70025 4.59302 16.0032H10.2933C10.3061 12.8512 12.8608 10.3029 16.0064 10.3029Z" fill="black"/><path d="M17.9392 21.3653C20.1365 20.5706 21.7067 18.4714 21.7067 16.0032H10.3051C10.3051 18.4714 11.8752 20.577 14.0725 21.3653V21.4634H5.99573C7.92853 25.0037 11.6907 27.4037 16.0117 27.4037C20.3328 27.4037 24.0885 25.0026 26.0277 21.4634H17.9381V21.3653H17.9392Z" fill="black"/></svg>';
 
 	public function should_load(): bool {
-		/**
-		 * Filters whether the Upsun dashboard page is registered.
-		 *
-		 * @param bool $enabled Default true.
-		 */
-		return (bool) apply_filters( 'upsun_dashboard_enabled', true );
+		// Boot gating belongs to the registry: UPSUN_DISABLE_DASHBOARD and
+		// the upsun_module_enabled filter are applied there, uniformly for
+		// every module rather than the eight that happened to have one.
+		return true;
 	}
 
 	public function register(): void {
@@ -711,7 +709,9 @@ class Dashboard implements Module {
 					'' !== $id ? ModuleRegistry::disable_constant_name( $id ) : 'UPSUN_DISABLE_*'
 				);
 			case 'filter':
-				return __( 'removed by the upsun_mu_modules filter', 'upsun-mu-plugin' );
+				return __( 'removed by the upsun_modules filter', 'upsun-mu-plugin' );
+			case 'disabled':
+				return __( 'disabled by the upsun_module_enabled filter', 'upsun-mu-plugin' );
 			case 'declined':
 				return __( 'inactive (should_load() returned false)', 'upsun-mu-plugin' );
 			case 'missing':

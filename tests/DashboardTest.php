@@ -225,7 +225,7 @@ final class DashboardTest extends TestCase {
 		$this->assertStringContainsString( 'test', $html );
 		$this->assertStringContainsString( 'loaded', $html );
 		// Defaults removed by the consumer filter are reported as such.
-		$this->assertStringContainsString( 'removed by the upsun_mu_modules filter', $html );
+		$this->assertStringContainsString( 'removed by the upsun_modules filter', $html );
 
 		// Reset registry state for other tests.
 		upsun_test_reset_hooks();

@@ -478,12 +478,19 @@ final class Vendor {
 		// Built-in, conditionally-active fetchers, before the universal
 		// fallback. Each no-ops via supports() when its backing source is
 		// absent (so it's inert off its target), and can be turned off with
-		// UPSUN_DISABLE_FETCHER_<ID> — mirroring the integrations convention.
-		if ( ! self::fetcher_disabled( 'thimpress' ) ) {
+		// UPSUN_DISABLE_FETCHER_<ID> or the upsun_fetcher_enabled filter —
+		// mirroring the integrations convention.
+		if ( self::fetcher_enabled( 'thimpress' ) ) {
 			$fetchers[] = new Fetchers\ThimPressFetcher();
 		}
 
-		$fetchers[] = new Fetchers\TransientFetcher();
+		// The universal fallback is gated the same way: documented as
+		// switchable, so it has to actually be switchable. Turning it off
+		// disables generic resolution — only packages a specific fetcher
+		// claims can then be resolved.
+		if ( self::fetcher_enabled( 'transient' ) ) {
+			$fetchers[] = new Fetchers\TransientFetcher();
+		}
 
 		return $fetchers;
 	}
@@ -495,10 +502,22 @@ final class Vendor {
 		return 'UPSUN_DISABLE_FETCHER_' . strtoupper( str_replace( '-', '_', $id ) );
 	}
 
-	private static function fetcher_disabled( string $id ): bool {
+	private static function fetcher_enabled( string $id ): bool {
 		$const = self::fetcher_disable_constant_name( $id );
 
-		return defined( $const ) && constant( $const );
+		if ( defined( $const ) && constant( $const ) ) {
+			return false;
+		}
+
+		/**
+		 * Filters whether a built-in fetcher is registered, by id ('thimpress',
+		 * 'transient') — the conditional counterpart to
+		 * UPSUN_DISABLE_FETCHER_{ID}, which is read first and wins.
+		 *
+		 * @param bool   $enabled Default true.
+		 * @param string $id      Fetcher id.
+		 */
+		return (bool) apply_filters( 'upsun_fetcher_enabled', true, $id );
 	}
 
 	/**

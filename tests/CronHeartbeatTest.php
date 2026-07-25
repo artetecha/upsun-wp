@@ -113,11 +113,16 @@ final class CronHeartbeatTest extends TestCase {
 		$this->assertIsCallable( $checks['cron_heartbeat']['callback'] );
 	}
 
-	public function test_enabled_filter_gates_should_load(): void {
+	/**
+	 * Boot gating moved to ModuleRegistry in 0.7 (upsun_module_enabled, plus
+	 * the deprecated name), so should_load() no longer reads a filter. The
+	 * gating itself — old name and new — is covered in ModuleRegistryTest.
+	 */
+	public function test_should_load_is_unconditional(): void {
 		$this->assertTrue( ( new CronHeartbeat() )->should_load() );
 
 		add_filter( 'upsun_cron_heartbeat_enabled', '__return_false' );
 
-		$this->assertFalse( ( new CronHeartbeat() )->should_load() );
+		$this->assertTrue( ( new CronHeartbeat() )->should_load() );
 	}
 }
