@@ -359,7 +359,33 @@ composer install
 composer test   # PHPUnit, no WordPress install required
 ```
 
-PHP floor is **8.1** (enforced in CI); tests are standalone with minimal WordPress function stubs.
+The unit suite is standalone, with minimal WordPress function stubs.
+
+### Integration harness
+
+A second suite runs against **real WordPress and a real database**: it builds a
+throwaway consumer project the way
+[Installation](#installation-composer-managed-wordpress) describes,
+installs WordPress, and asserts the off-platform no-op, on-platform module boot,
+the `UPSUN_MU_DISABLE` kill switch, the `wp upsun` commands, and the response
+headers the modules emit — over HTTP, through the PHP built-in server.
+
+```
+docker run --rm -d -p 3306:3306 -e MARIADB_ROOT_PASSWORD=root \
+  -e MARIADB_DATABASE=wp --name upsun-wp-db mariadb:11
+bash tests/integration/run.sh
+docker rm -f upsun-wp-db
+```
+
+`WP_CORE` selects the WordPress version (`6.0.*`, `^7.0`, …) and `KEEP=1` leaves
+the install in place for inspection; see the header of
+[`tests/integration/run.sh`](tests/integration/run.sh) for the rest.
+
+### Supported versions
+
+PHP **8.1–8.5** and WordPress **6.0+**, both enforced in CI: the unit suite runs
+on every PHP version in that range, and the integration harness runs five
+curated PHP × WordPress corners including the 6.0/8.1 floor.
 
 ## Roadmap
 
