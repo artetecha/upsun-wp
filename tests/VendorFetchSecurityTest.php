@@ -116,9 +116,28 @@ final class VendorFetchSecurityTest extends TestCase {
 
 	public static function relative_locations(): array {
 		return array(
-			'absolute path' => array( '/other/pkg.zip', 'https://example.test/other/pkg.zip' ),
-			'same directory' => array( 'real.zip', 'https://example.test/dl/real.zip' ),
+			'absolute path'     => array( '/other/pkg.zip', 'https://example.test/other/pkg.zip' ),
+			'same directory'    => array( 'real.zip', 'https://example.test/dl/real.zip' ),
+			// A form real CDNs emit: different host, same scheme. Must not be
+			// read as an absolute path on the original host.
+			'protocol relative' => array( '//cdn.example.test/pkg.zip', 'https://cdn.example.test/pkg.zip' ),
 		);
+	}
+
+	/**
+	 * The scheme a protocol-relative redirect inherits is the one we just
+	 * used, so the https requirement still applies to the next hop.
+	 */
+	public function test_a_protocol_relative_redirect_stays_https(): void {
+		upsun_test_http_reset(
+			array(
+				array( 'code' => 302, 'headers' => array( 'location' => '//cdn.example.test/pkg.zip' ) ),
+				array( 'code' => 200, 'body' => 'PK-final' ),
+			)
+		);
+
+		$this->assertTrue( Vendor::fetch_zip( 'https://example.test/dl/pkg.zip', array(), $this->dest ) );
+		$this->assertStringStartsWith( 'https://', $GLOBALS['upsun_test_http']['requests'][1]['url'] );
 	}
 
 	public function test_a_redirect_loop_is_bounded(): void {

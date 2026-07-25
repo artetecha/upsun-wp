@@ -928,7 +928,8 @@ final class Vendor {
 	/**
 	 * Resolve a Location header against the URL it came from. Only enough of
 	 * RFC 3986 to handle what real download endpoints send: absolute URLs,
-	 * absolute paths, and same-directory relative paths.
+	 * protocol-relative URLs, absolute paths, and same-directory relative
+	 * paths.
 	 */
 	private static function absolute_url( string $location, string $base ): string {
 		if ( preg_match( '#^[a-z][a-z0-9+.-]*://#i', $location ) ) {
@@ -939,6 +940,15 @@ final class Vendor {
 
 		if ( ! is_array( $parts ) || empty( $parts['scheme'] ) || empty( $parts['host'] ) ) {
 			return '';
+		}
+
+		// Protocol-relative (//cdn.example/pkg.zip): a different host, the same
+		// scheme. Checked before the absolute-path branch, which would
+		// otherwise read the leading slash and keep us on the original host
+		// with a malformed path. The scheme carried over is the one we just
+		// used, so the https requirement still holds on the next hop.
+		if ( 0 === strpos( $location, '//' ) ) {
+			return $parts['scheme'] . ':' . $location;
 		}
 
 		$origin = $parts['scheme'] . '://' . $parts['host']

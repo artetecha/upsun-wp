@@ -48,7 +48,7 @@ What guards it:
 |---|---|
 | Remote fetches must be **https**, re-checked at **every redirect hop** | `Vendor::download_https()` |
 | Redirect chain bounded (5 hops), refused chains delete the partial file | same |
-| Download capped at **256 MB** (`limit_response_size`) | same |
+| Download capped at **256 MB** (`limit_response_size`), enforced while streaming | same |
 | Archive entries refused if absolute, drive-lettered, or containing `..` | `Vendor::extract_zip()` |
 | Declared uncompressed size capped at **1 GB**, checked before extracting | same |
 | Work directory is `0700` with a `random_bytes()` name; a failed `mkdir()` is fatal | `Vendor::temp_dir()` |
@@ -80,6 +80,16 @@ Accepted risks:
   a larger problem than one outbound request.
 - **A zip bomb below the caps still costs disk.** Writable space on Upsun is a
   finite declared mount; the caps bound the damage rather than eliminate it.
+
+A note on the download cap, since "capped" is only true if the transport
+enforces it while streaming to a file rather than after buffering: it does, on
+both the floor and current WordPress. In the bundled Requests library the byte
+limit is applied in the write callback **before** the data reaches the stream
+handle — WP 6.0's `wp-includes/Requests/Transport/cURL.php::stream_body()`
+truncates `$data`, then writes, and the fsockopen transport does the same in its
+read loop. The effect of exceeding the cap is therefore a **truncated file**,
+which then fails to open as an archive and aborts the re-vendor — a failed
+update, not a filled mount.
 
 ## Privileged surface 2 — the Cloudflare origin guard
 
