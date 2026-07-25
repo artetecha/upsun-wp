@@ -146,10 +146,13 @@ integrations do.
 
 - `UPSUN_MU_DISABLE` — kill switch for the whole plugin.
 - `UPSUN_DISABLE_CLOUDFLARE`, `UPSUN_DISABLE_SECURITY_HEADERS`, `UPSUN_DISABLE_ENVIRONMENT_INDICATOR`, `UPSUN_DISABLE_PAGE_CACHE`, `UPSUN_DISABLE_UPDATES_POLICY`, `UPSUN_DISABLE_SITE_HEALTH`, `UPSUN_DISABLE_PREVIEW_PROTECTION`, `UPSUN_DISABLE_SMTP`, `UPSUN_DISABLE_DASHBOARD`, `UPSUN_DISABLE_CRON_HEARTBEAT`, `UPSUN_DISABLE_SAFE_PREVIEWS`, `UPSUN_DISABLE_WRITABLE_PATHS`, `UPSUN_DISABLE_MOUNT_USAGE` — per-module switches.
-- `UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE`, `UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE_STRIPE` — per-integration switches.
+- `UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE`, `UPSUN_DISABLE_INTEGRATION_WOOCOMMERCE_STRIPE`, `UPSUN_DISABLE_INTEGRATION_WORDFENCE`, `UPSUN_DISABLE_INTEGRATION_UPDRAFTPLUS`, `UPSUN_DISABLE_INTEGRATION_WP_ROCKET` — per-integration switches.
 - `UPSUN_DISABLE_FETCHER_THIMPRESS` — turns off the built-in ThimPress vendored-update fetcher (it is already inert without thim-core).
+- `UPSUN_DISABLE_FETCHER_TRANSIENT` — turns off the universal fallback fetcher. Note this disables generic vendored-update resolution entirely: with no fallback, only packages claimed by a specific fetcher can be resolved.
 - `UPSUN_MIGRATIONS_DIR` — directory of deploy migrations (see below); unset = feature idle.
 - `UPSUN_MU_FORCE` — boot modules and integrations off-platform (testing against faked `PLATFORM_*` variables).
+
+Defined by the plugin, readable by consumers: `UPSUN_MU_PLUGIN_DIR` (the plugin's own directory) and `UPSUN_MU_PLUGIN_VERSION` (also returned by `Upsun\version()`).
 
 ### Filters
 
@@ -304,6 +307,16 @@ raising a PR per package stays your CI's job.
 ### Helper functions
 
 `Upsun\is_upsun()`, `Upsun\environment_name()`, `Upsun\environment_type()`, `Upsun\is_production()`, `Upsun\is_preview_environment()`, `Upsun\branch()`, `Upsun\project_id()`, `Upsun\application_name()`, `Upsun\primary_route()`, `Upsun\routes()`, `Upsun\relationship( string $name )`, `Upsun\version()` — all safe to call off-platform.
+
+These twelve functions are the plugin's **only** supported PHP entry point for
+reading the environment. The `Upsun\` classes behind them — including
+`Upsun\Environment` — are marked `@internal`: they may change in any release.
+Extension points are the filters above and the four interfaces (`Upsun\Module`,
+`Upsun\Integration`, `Upsun\Fetcher`, `Upsun\FetcherStatus`); the reporting
+helpers a consumer may legitimately call (`ModuleRegistry::status()`,
+`IntegrationRegistry::status()`, `Vendor::fetcher_status()`, the shared
+`check()` methods, and the high-level `Vendor::` operations behind
+`wp upsun vendor`) are the exceptions, and are not marked internal.
 
 ## WP-CLI
 

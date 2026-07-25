@@ -21,6 +21,8 @@ final class RelationshipHealth {
 	 *
 	 * @return array<int, array{relationship: string, scheme: string, host: string, status: string, detail: string}>
 	 *               status: pass | warn | fail | skip.
+	 *
+	 * @internal
 	 */
 	public static function probe_all(): array {
 		$rows = array();
@@ -54,6 +56,8 @@ final class RelationshipHealth {
 
 	/**
 	 * @return array{status: string, detail: string}
+	 *
+	 * @internal
 	 */
 	public static function probe( array $instance ): array {
 		switch ( (string) ( $instance['scheme'] ?? '' ) ) {
@@ -249,6 +253,8 @@ final class RelationshipHealth {
 	/**
 	 * Human summary of a Redis INFO payload: memory against maxmemory,
 	 * keyspace hit rate, evictions (the "is my cache sized right?" trio).
+	 *
+	 * @internal
 	 */
 	public static function redis_detail( array $info ): string {
 		$used = (int) ( $info['used_memory'] ?? 0 );
@@ -275,6 +281,8 @@ final class RelationshipHealth {
 	 * status Elasticsearch/OpenSearch report on their root/health bodies.
 	 *
 	 * @return array{status: string, detail: string}
+	 *
+	 * @internal
 	 */
 	public static function http_verdict( int $code, string $body ): array {
 		$cluster = '';
@@ -304,6 +312,9 @@ final class RelationshipHealth {
 		);
 	}
 
+	/**
+	 * @internal
+	 */
 	public static function human_bytes( int $bytes ): string {
 		$units = array( 'B', 'K', 'M', 'G', 'T' );
 		$value = (float) max( 0, $bytes );

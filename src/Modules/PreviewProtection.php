@@ -24,7 +24,7 @@ class PreviewProtection implements Module {
 	}
 
 	public function add_noindex( array $robots ): array {
-		if ( ! $this->enabled() ) {
+		if ( ! self::noindex() ) {
 			return $robots;
 		}
 
@@ -35,14 +35,21 @@ class PreviewProtection implements Module {
 	}
 
 	public function send_robots_header(): void {
-		if ( ! $this->enabled() || headers_sent() ) {
+		if ( ! self::noindex() || headers_sent() ) {
 			return;
 		}
 
 		header( 'X-Robots-Tag: noindex, nofollow' );
 	}
 
-	private function enabled(): bool {
+	/**
+	 * The single application point of upsun_preview_noindex. The Site Health
+	 * "search visibility" check reads it from here instead of re-applying the
+	 * filter, so a consumer callback runs once per request.
+	 *
+	 * @internal
+	 */
+	public static function noindex(): bool {
 		/**
 		 * Filters whether non-production environments send noindex. Disable
 		 * for a real staging domain that should be indexable.

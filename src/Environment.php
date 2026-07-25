@@ -5,6 +5,13 @@
  * Deliberately has no dependency on platformsh/config-reader so the plugin
  * works in any consumer project. All decoding is defensive: malformed base64
  * or JSON degrades to an empty array, never a fatal.
+ *
+ * @internal The whole class. Consumer code reads the environment through the
+ * Upsun\*() helper functions in helpers.php, which are the documented, frozen
+ * facade over this reader — one public surface, not two. Keeping this class
+ * internal leaves us free to change how PLATFORM_* is decoded without a major
+ * bump; anything here a consumer legitimately needs should be exposed as a
+ * helper instead.
  */
 
 namespace Upsun;

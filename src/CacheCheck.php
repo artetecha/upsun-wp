@@ -82,7 +82,7 @@ final class CacheCheck {
 				'headers'         => $headers,
 				'cookie_header'   => $cookie_header,
 				'route_cache'     => self::route_cache_config( $resolved ),
-				'bypass_patterns' => (array) apply_filters( 'upsun_page_cache_bypass_cookie_patterns', PageCache::DEFAULT_COOKIE_PATTERNS ),
+				'bypass_patterns' => PageCache::bypass_patterns(),
 			)
 		);
 	}
@@ -96,6 +96,8 @@ final class CacheCheck {
 	 *                     bypass_patterns}.
 	 * @return array {cacheable: bool, ttl: ?int, summary: string,
 	 *                rows: array<array{field,value}>, notes: string[]}
+	 *
+	 * @internal
 	 */
 	public static function analyze( array $input ): array {
 		$headers  = (array) ( $input['headers'] ?? array() );
@@ -223,6 +225,8 @@ final class CacheCheck {
 	/**
 	 * Resolve a path against the primary route; pass absolute URLs through.
 	 * Returns null for anything else (scheme-less hosts, other protocols).
+	 *
+	 * @internal
 	 */
 	public static function resolve_url( string $url ): ?string {
 		$url = trim( $url );
@@ -243,6 +247,8 @@ final class CacheCheck {
 	/**
 	 * Whether the URL's host belongs to one of this environment's routes.
 	 * The dashboard form only checks the environment's own URLs.
+	 *
+	 * @internal
 	 */
 	public static function is_environment_url( string $url ): bool {
 		$host = strtolower( (string) parse_url( $url, PHP_URL_HOST ) );
@@ -266,6 +272,8 @@ final class CacheCheck {
 	 * when the route or its cache block is not visible.
 	 *
 	 * @return array{enabled: bool, default_ttl: int, cookies: array, known: bool}
+	 *
+	 * @internal
 	 */
 	public static function route_cache_config( string $url ): array {
 		$best       = null;
