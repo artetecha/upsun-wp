@@ -20,8 +20,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 8.1 enforces the package's PHP floor.
-        php: ['8.1', '8.4']
+        # The full supported range: 8.1 is the package floor, 8.5 the ceiling.
+        php: ['8.1', '8.2', '8.3', '8.4', '8.5']
     steps:
       - uses: actions/checkout@v4
 
@@ -36,9 +36,23 @@ jobs:
 
       - run: vendor/bin/phpunit
 
-  smoke:
-    name: WP integration smoke
+  integration:
+    name: WP ${{ matrix.wp-label }} / PHP ${{ matrix.php }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # Curated corners, not a cross product: the two floors together, the
+      # two ceilings together, and the current release across the range. A
+      # full product would pair PHP 8.5 with WordPress versions released
+      # years before it, which no consumer runs and which only tests
+      # WordPress's own deprecation noise.
+      matrix:
+        include:
+          - { php: '8.1', wp: '6.0.*', wp-label: '6.0 (floor)' }
+          - { php: '8.1', wp: '^7.0', wp-label: '7.x' }
+          - { php: '8.3', wp: '6.9.*', wp-label: '6.9' }
+          - { php: '8.4', wp: '^7.0', wp-label: '7.x' }
+          - { php: '8.5', wp: '^7.0', wp-label: '7.x' }
     services:
       db:
         image: mariadb:11
@@ -52,75 +66,22 @@ jobs:
           --health-interval=5s --health-timeout=3s --health-retries=10
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: plugin
 
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: ${{ matrix.php }}
           extensions: mysqli
           tools: composer, wp-cli
           coverage: none
 
-      # A throwaway consumer project using the documented inside-core-dir
-      # pattern: the package routes to a staging directory (core extraction
-      # replaces the whole wordpress/ tree, and alphabetical install order
-      # puts artetecha/* before johnpbloch/*), then a postbuild script
-      # copies it in with the loader shim — exactly what the README says.
-      - name: Build consumer project
-        run: |
-          mkdir consumer && cd consumer
-          cat > composer.json <<'JSON'
-          {
-            "repositories": [
-              { "type": "path", "url": "../plugin", "options": { "symlink": false } }
-            ],
-            "require": {
-              "artetecha/upsun-wp": "@dev",
-              "johnpbloch/wordpress-core": "^7.0",
-              "johnpbloch/wordpress-core-installer": "^2.0",
-              "composer/installers": "^2.0"
-            },
-            "extra": {
-              "wordpress-install-dir": "wordpress",
-              "installer-paths": {
-                "composer-mu-plugins/{$name}": ["artetecha/upsun-wp"],
-                "wordpress/wp-content/mu-plugins/{$name}": ["type:wordpress-muplugin"]
-              }
-            },
-            "scripts": {
-              "postbuild": [
-                "mkdir -p wordpress/wp-content/mu-plugins",
-                "rm -rf wordpress/wp-content/mu-plugins/upsun",
-                "cp -R composer-mu-plugins/upsun wordpress/wp-content/mu-plugins/upsun",
-                "cp composer-mu-plugins/upsun/upsun-loader.php wordpress/wp-content/mu-plugins/upsun-loader.php"
-              ],
-              "post-install-cmd": "@postbuild",
-              "post-update-cmd": "@postbuild"
-            },
-            "config": {
-              "allow-plugins": {
-                "composer/installers": true,
-                "johnpbloch/wordpress-core-installer": true
-              }
-            }
-          }
-          JSON
-          composer install --no-interaction --no-progress
-          test -f wordpress/wp-content/mu-plugins/upsun/upsun.php
-          test -f wordpress/wp-content/mu-plugins/upsun-loader.php
-
-      - name: Install WordPress
-        working-directory: consumer/wordpress
-        run: |
-          wp config create --dbname=wp --dbuser=root --dbpass=root --dbhost=127.0.0.1
-          wp core install --url=http://localhost --title=Smoke \
-            --admin_user=admin --admin_password=smoke-only --admin_email=smoke@example.invalid --skip-email
-
-      # Off-platform, the plugin must load its API and fully no-op.
-      - name: Assert loader shim and off-platform no-op
-        working-directory: consumer/wordpress
-        run: |
-          wp eval 'exit( function_exists( "Upsun\\is_upsun" ) && ! Upsun\is_upsun() ? 0 : 1 );'
-          wp upsun info | grep -q "Not running on Upsun"
-          wp upsun doctor | grep -q "Not running on Upsun"
+      # Builds a throwaway consumer project the way the README documents,
+      # installs WordPress, and asserts the off-platform, on-platform,
+      # kill-switch, CLI, and HTTP contracts. See tests/integration/run.sh.
+      - name: Integration harness
+        env:
+          WP_CORE: ${{ matrix.wp }}
+          DB_HOST: 127.0.0.1
+          DB_NAME: wp
+          DB_USER: root
+          DB_PASS: root
+        run: bash tests/integration/run.sh
