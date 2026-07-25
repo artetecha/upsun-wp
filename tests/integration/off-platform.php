@@ -37,21 +37,8 @@ it_section( 'Nothing booted' );
 it_same( 'no modules registered', array(), Upsun\ModuleRegistry::status() );
 it_same( 'no integrations registered', array(), Upsun\IntegrationRegistry::status() );
 
-$tests = apply_filters(
-	'site_status_tests',
-	array(
-		'direct' => array(),
-		'async'  => array(),
-	)
-);
-
-$upsun_tests = array_filter(
-	array_keys( (array) ( $tests['direct'] ?? array() ) ),
-	static fn ( $key ) => 0 === strpos( (string) $key, 'upsun_' )
-);
-
-it_same( 'no Site Health tests added', array(), array_values( $upsun_tests ) );
-it_same( 'no admin menu registered', false, has_action( 'admin_menu', array( 'Upsun\\Modules\\Dashboard', 'register_menu' ) ) );
+it_same( 'no Site Health tests added', array(), it_site_health_test_ids() );
+it_same( 'no admin menu registered', false, it_dashboard_menu_registered() );
 
 it_section( 'Cache-header path stays out of the way' );
 

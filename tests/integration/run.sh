@@ -81,13 +81,39 @@ mkdir -p "${WORK_DIR}"
 # WP_DEBUG in the eval-file scripts.
 export WP_CLI_PHP_ARGS='-d error_reporting=24575'
 
+# Only reached when no wp is on PATH — CI installs one. This branch fetches and
+# then executes remote PHP (with --allow-root in a container), so it takes an
+# immutable versioned release asset and verifies it against a pinned digest
+# rather than the rolling "latest stable" build.
+WP_CLI_VERSION='2.12.0'
+WP_CLI_SHA512='be928f6b8ca1e8dfb9d2f4b75a13aa4aee0896f8a9a0a1c45cd5d2c98605e6172e6d014dda2e27f88c98befc16c040cbb2bd1bfa121510ea5cdf5f6a30fe8832'
+
 if command -v wp >/dev/null; then
 	WP_CLI=(wp)
 else
-	say 'Downloading WP-CLI'
-	curl -sSL -o "${WORK_DIR}/wp-cli.phar" \
-		https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
-	WP_CLI=(php -d error_reporting=24575 "${WORK_DIR}/wp-cli.phar")
+	say "Downloading WP-CLI ${WP_CLI_VERSION}"
+
+	PHAR="${WORK_DIR}/wp-cli.phar"
+
+	# -f so an HTTP error is a failure rather than an error page written to
+	# the phar and executed as PHP.
+	curl -fsSL -o "${PHAR}" \
+		"https://github.com/wp-cli/wp-cli/releases/download/v${WP_CLI_VERSION}/wp-cli-${WP_CLI_VERSION}.phar" \
+		|| die "could not download WP-CLI ${WP_CLI_VERSION}"
+
+	if command -v sha512sum >/dev/null; then
+		PHAR_SHA512="$(sha512sum "${PHAR}" | awk '{print $1}')"
+	elif command -v shasum >/dev/null; then
+		PHAR_SHA512="$(shasum -a 512 "${PHAR}" | awk '{print $1}')"
+	else
+		die 'neither sha512sum nor shasum is available to verify the WP-CLI download'
+	fi
+
+	if [[ "${PHAR_SHA512}" != "${WP_CLI_SHA512}" ]]; then
+		die "WP-CLI checksum mismatch — expected ${WP_CLI_SHA512}, got ${PHAR_SHA512}"
+	fi
+
+	WP_CLI=(php -d error_reporting=24575 "${PHAR}")
 fi
 
 # Never run WP-CLI as root without --allow-root (CI containers do).
@@ -209,6 +235,7 @@ export PLATFORM_ROUTES="$(b64 "${ROUTES_JSON}")"
 export PLATFORM_RELATIONSHIPS="$(b64 "${RELATIONSHIPS_JSON}")"
 export PLATFORM_APPLICATION="$(b64 "${APPLICATION_JSON}")"
 export UPSUN_IT_SITE_URL="${SITE_URL}"
+export UPSUN_IT_DB_HOST="${DB_HOST}"
 
 say 'On-platform assertions'
 
@@ -240,7 +267,17 @@ wpcli upsun doctor || die 'wp upsun doctor exited non-zero'
 
 say "Serving ${SITE_URL}"
 
-(cd "${WP_DIR}" && php -S "127.0.0.1:${PORT}" > "${WORK_DIR}/server.log" 2>&1) &
+# A listener already on the port would answer the assertions below from
+# somewhere else entirely — a false green. Best-effort pre-flight; the
+# authoritative check is that our own server is alive after the wait.
+if command -v lsof >/dev/null && lsof -iTCP:"${PORT}" -sTCP:LISTEN >/dev/null 2>&1; then
+	die "port ${PORT} is already in use — stop that process, or re-run with PORT=<other>"
+fi
+
+# Started directly rather than in a subshell: a subshell's PID is not the
+# server's, so cleanup() would kill the wrapper and orphan php -S still bound
+# to the port, breaking the next local run.
+php -S "127.0.0.1:${PORT}" -t "${WP_DIR}" > "${WORK_DIR}/server.log" 2>&1 &
 SERVER_PID=$!
 
 for _ in $(seq 1 40); do
@@ -249,6 +286,13 @@ for _ in $(seq 1 40); do
 	fi
 	sleep 0.25
 done
+
+# Our server, not merely something on the port: if php -S failed to bind it
+# would have exited, and everything below would be asserted against a stranger.
+if ! kill -0 "${SERVER_PID}" 2>/dev/null; then
+	cat "${WORK_DIR}/server.log"
+	die 'the built-in server exited (see the log above; a stale listener on the port is the usual cause)'
+fi
 
 if ! curl -fsS -o /dev/null "${SITE_URL}/"; then
 	cat "${WORK_DIR}/server.log"

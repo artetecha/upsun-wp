@@ -29,7 +29,8 @@ it_same( 'primary_route()', getenv( 'UPSUN_IT_SITE_URL' ) . '/', Upsun\primary_r
 $database = Upsun\relationship( 'database' );
 
 it_ok( 'relationship( database ) decodes to an instance', is_array( $database ) );
-it_same( 'relationship carries the host', '127.0.0.1', $database['host'] ?? null );
+// The harness builds the fake relationship from DB_HOST, which is overridable.
+it_same( 'relationship carries the host', getenv( 'UPSUN_IT_DB_HOST' ), $database['host'] ?? null );
 it_same( 'an absent relationship is null', null, Upsun\relationship( 'nope' ) );
 
 it_section( 'Module boot under real WordPress' );
@@ -66,22 +67,15 @@ it_section( 'Hooks landed on real WordPress' );
 
 it_ok( 'Site Health tests filter hooked', false !== has_filter( 'site_status_tests' ) );
 it_ok( 'debug information filter hooked', false !== has_filter( 'debug_information' ) );
-it_ok( 'admin menu hooked', false !== has_action( 'admin_menu' ) );
 it_ok( 'send_headers hooked (security headers)', false !== has_action( 'send_headers' ) );
 it_ok( 'template_redirect hooked (page cache)', false !== has_action( 'template_redirect' ) );
 
-$tests = apply_filters(
-	'site_status_tests',
-	array(
-		'direct' => array(),
-		'async'  => array(),
-	)
-);
+// The positive side of the probe the off-platform and kill-switch suites use
+// negatively — so a change that breaks it fails here instead of silently
+// weakening those two.
+it_same( 'the dashboard registered its admin menu', true, it_dashboard_menu_registered() );
 
-$upsun_tests = array_filter(
-	array_keys( (array) ( $tests['direct'] ?? array() ) ),
-	static fn ( $key ) => 0 === strpos( (string) $key, 'upsun_' )
-);
+$upsun_tests = it_site_health_test_ids();
 
 it_ok(
 	'Upsun tests are registered with core Site Health',

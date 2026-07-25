@@ -57,6 +57,59 @@ function it_export( $value ): string {
 }
 
 /**
+ * The Upsun test ids core Site Health would run, resolved through the real
+ * filter. Shared by every suite so the hook name and the id prefix live in one
+ * place rather than three.
+ *
+ * @return string[]
+ */
+function it_site_health_test_ids(): array {
+	$tests = apply_filters(
+		'site_status_tests',
+		array(
+			'direct' => array(),
+			'async'  => array(),
+		)
+	);
+
+	return array_values(
+		array_filter(
+			array_keys( (array) ( $tests['direct'] ?? array() ) ),
+			static fn ( $key ) => 0 === strpos( (string) $key, 'upsun_' )
+		)
+	);
+}
+
+/**
+ * Whether the dashboard module registered its admin menu.
+ *
+ * Dashboard hooks admin_menu with an instance callback, so has_action() cannot
+ * be given a comparable callable from outside (there is no public accessor for
+ * module instances). Walking the hook and matching on the object's class is the
+ * only probe that answers true when the module is booted and false when it is
+ * not — which is what makes the same helper usable by all three suites.
+ */
+function it_dashboard_menu_registered(): bool {
+	global $wp_filter;
+
+	if ( ! isset( $wp_filter['admin_menu'] ) ) {
+		return false;
+	}
+
+	foreach ( $wp_filter['admin_menu'] as $callbacks ) {
+		foreach ( (array) $callbacks as $registered ) {
+			$callback = $registered['function'] ?? null;
+
+			if ( is_array( $callback ) && ( $callback[0] ?? null ) instanceof \Upsun\Modules\Dashboard ) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+/**
  * Print the WordPress/PHP context the assertions ran against, so a matrix
  * failure in CI is attributable without re-reading the job matrix.
  */
