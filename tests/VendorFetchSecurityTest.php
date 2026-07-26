@@ -140,6 +140,93 @@ final class VendorFetchSecurityTest extends TestCase {
 		$this->assertStringStartsWith( 'https://', $GLOBALS['upsun_test_http']['requests'][1]['url'] );
 	}
 
+	/* ---- Credentials across a redirect -------------------------------- */
+
+	/**
+	 * The Fetcher contract permits auth headers in the resolved download, and
+	 * the vendor endpoint is untrusted, so a 302 to a host it controls must not
+	 * carry the licence token with it.
+	 */
+	public function test_credentials_are_dropped_on_a_cross_host_redirect(): void {
+		upsun_test_http_reset(
+			array(
+				array( 'code' => 302, 'headers' => array( 'location' => 'https://attacker.test/pkg.zip' ) ),
+				array( 'code' => 200, 'body' => 'PK-final' ),
+			)
+		);
+
+		Vendor::fetch_zip( 'https://vendor.test/pkg.zip', array( 'Authorization' => 'Bearer licence-token' ), $this->dest );
+
+		$requests = $GLOBALS['upsun_test_http']['requests'];
+
+		$this->assertSame( array( 'Authorization' => 'Bearer licence-token' ), $requests[0]['args']['headers'] );
+		$this->assertSame( array(), $requests[1]['args']['headers'], 'the token followed the redirect off-origin' );
+	}
+
+	/**
+	 * @dataProvider off_origin_redirects
+	 */
+	public function test_any_origin_change_drops_credentials( string $from, string $location ): void {
+		upsun_test_http_reset(
+			array(
+				array( 'code' => 302, 'headers' => array( 'location' => $location ) ),
+				array( 'code' => 200, 'body' => 'PK-final' ),
+			)
+		);
+
+		Vendor::fetch_zip( $from, array( 'X-Api-Key' => 'secret' ), $this->dest );
+
+		$this->assertSame( array(), $GLOBALS['upsun_test_http']['requests'][1]['args']['headers'] );
+	}
+
+	public static function off_origin_redirects(): array {
+		return array(
+			'different host'        => array( 'https://vendor.test/pkg.zip', 'https://cdn.test/pkg.zip' ),
+			'protocol relative'    => array( 'https://vendor.test/pkg.zip', '//cdn.test/pkg.zip' ),
+			'different port'       => array( 'https://vendor.test/pkg.zip', 'https://vendor.test:8443/pkg.zip' ),
+			'subdomain of the same' => array( 'https://vendor.test/pkg.zip', 'https://dl.vendor.test/pkg.zip' ),
+		);
+	}
+
+	/**
+	 * A same-origin redirect is the ordinary case — a vendor moving the path —
+	 * and must keep working with the credential attached.
+	 */
+	public function test_credentials_survive_a_same_origin_redirect(): void {
+		upsun_test_http_reset(
+			array(
+				array( 'code' => 302, 'headers' => array( 'location' => '/real/pkg.zip' ) ),
+				array( 'code' => 200, 'body' => 'PK-final' ),
+			)
+		);
+
+		$this->assertTrue(
+			Vendor::fetch_zip( 'https://vendor.test/dl/pkg.zip', array( 'Authorization' => 'Bearer t' ), $this->dest )
+		);
+
+		$requests = $GLOBALS['upsun_test_http']['requests'];
+
+		$this->assertSame( 'https://vendor.test/real/pkg.zip', $requests[1]['url'] );
+		$this->assertSame( array( 'Authorization' => 'Bearer t' ), $requests[1]['args']['headers'] );
+	}
+
+	/** An implicit :443 and an explicit one are the same origin. */
+	public function test_an_explicit_default_port_is_the_same_origin(): void {
+		upsun_test_http_reset(
+			array(
+				array( 'code' => 302, 'headers' => array( 'location' => 'https://vendor.test:443/real.zip' ) ),
+				array( 'code' => 200, 'body' => 'PK-final' ),
+			)
+		);
+
+		Vendor::fetch_zip( 'https://vendor.test/pkg.zip', array( 'Authorization' => 'Bearer t' ), $this->dest );
+
+		$this->assertSame(
+			array( 'Authorization' => 'Bearer t' ),
+			$GLOBALS['upsun_test_http']['requests'][1]['args']['headers']
+		);
+	}
+
 	public function test_a_redirect_loop_is_bounded(): void {
 		$hops = array_fill(
 			0,

@@ -23,6 +23,11 @@ commitment needs.
   committed and executed would run over cleartext. Redirects are now followed one
   hop at a time with the scheme re-checked before each request, the chain is
   bounded at five hops, and a refused chain deletes the partial file.
+- **Credentials no longer follow a redirect off-origin.** The `Fetcher` contract
+  permits auth headers on the resolved download, and the vendor endpoint is
+  untrusted — so a compromised one could 302 to a host it controls and collect a
+  licence token. Every caller header is dropped when the scheme, host or port
+  changes, as browsers and curl do with `Authorization`.
 - **Bounded what an external archive can cost.** Downloads are capped at 256 MB
   (enforced while streaming), and the declared uncompressed size is capped at 1 GB
   and checked before anything is extracted.

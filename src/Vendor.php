@@ -907,10 +907,49 @@ final class Vendor {
 				return false;
 			}
 
-			$url = self::absolute_url( $location, $url );
+			$next = self::absolute_url( $location, $url );
+
+			// Credentials must not follow a redirect off the origin they were
+			// issued for. The Fetcher contract permits auth headers on the
+			// resolved download (a licensed vendor may want
+			// "Authorization: Bearer <token>"), and the vendor endpoint is
+			// untrusted by design — so a hostile or compromised one could 302
+			// to a host it controls and collect the token. Browsers and curl
+			// drop Authorization across a host change for the same reason.
+			// All caller headers go, not a denylist: a vendor's credential may
+			// be in any header name, and pre-signed CDN redirects (the common
+			// pattern) carry their authorisation in the URL, so nothing
+			// legitimate needs them on the far side.
+			if ( self::origin_of( $next ) !== self::origin_of( $url ) ) {
+				$headers = array();
+			}
+
+			$url = $next;
 		}
 
 		return false;
+	}
+
+	/**
+	 * The scheme://host:port of a URL, for comparing one hop against the next.
+	 * Empty when it cannot be parsed, which never equals a real origin — so
+	 * unparseable means "treat as different" and drop the credentials.
+	 */
+	private static function origin_of( string $url ): string {
+		$parts = parse_url( $url );
+
+		if ( ! is_array( $parts ) || empty( $parts['scheme'] ) || empty( $parts['host'] ) ) {
+			return '';
+		}
+
+		$scheme = strtolower( $parts['scheme'] );
+
+		return sprintf(
+			'%s://%s:%d',
+			$scheme,
+			strtolower( $parts['host'] ),
+			$parts['port'] ?? ( 'https' === $scheme ? 443 : 80 )
+		);
 	}
 
 	/**

@@ -48,6 +48,7 @@ What guards it:
 |---|---|
 | Remote fetches must be **https**, re-checked at **every redirect hop** | `Vendor::download_https()` |
 | Redirect chain bounded (5 hops), refused chains delete the partial file | same |
+| Caller credentials are **dropped when a redirect leaves the origin** | same |
 | Download capped at **256 MB** (`limit_response_size`), enforced while streaming | same |
 | Archive entries refused if absolute, drive-lettered, or containing `..` | `Vendor::extract_zip()` |
 | Declared uncompressed size capped at **1 GB**, checked before extracting | same |
@@ -60,6 +61,16 @@ itself and only validates them when `reject_unsafe_urls` is set — so before 0.
 https URL could redirect to http and downgrade the one fetch whose bytes get
 committed. That was a real hole, fixed and regression-tested
 (`tests/VendorFetchSecurityTest.php`).
+
+Following the chain ourselves brings the second rule with it: **a credential does
+not leave the origin it was issued for.** The `Fetcher` contract allows auth
+headers on the resolved download, and the vendor endpoint is untrusted — so a
+compromised one could redirect to a host it controls and collect a licence token.
+Every caller-supplied header is dropped when the scheme, host or port changes,
+rather than a denylist of known-sensitive names: a vendor's credential may live in
+any header, and the usual CDN pattern (a pre-signed URL) carries its authorisation
+in the URL, so nothing legitimate needs the headers on the far side. Browsers and
+curl strip `Authorization` across a host change for the same reason.
 
 Accepted risks:
 
