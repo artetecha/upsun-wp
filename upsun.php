@@ -15,7 +15,7 @@ if ( defined( 'UPSUN_MU_PLUGIN_DIR' ) ) {
 }
 
 define( 'UPSUN_MU_PLUGIN_DIR', __DIR__ );
-define( 'UPSUN_MU_PLUGIN_VERSION', '0.7.0' );
+define( 'UPSUN_MU_PLUGIN_VERSION', '0.8.0' );
 
 require_once __DIR__ . '/src/Deprecations.php';
 require_once __DIR__ . '/src/Environment.php';

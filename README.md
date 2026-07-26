@@ -19,7 +19,7 @@ loader shim), and wire the post_deploy hook.
 // composer.json
 {
   "require": {
-    "artetecha/upsun-wp": "^0.6"
+    "artetecha/upsun-wp": "^0.8"
   }
 }
 ```
@@ -425,6 +425,19 @@ the install in place for inspection; see the header of
 PHP **8.1–8.5** and WordPress **6.0+**, both enforced in CI: the unit suite runs
 on every PHP version in that range, and the integration harness runs five
 curated PHP × WordPress corners including the 6.0/8.1 floor.
+
+## Reference and contributing
+
+- **[docs/api-reference.md](docs/api-reference.md)** — the authoritative,
+  versioned reference for the whole public surface: every filter with its type
+  and default, the action, the constants, the helpers, the four extension
+  interfaces, and each `wp upsun` subcommand with its flags and `--format=json`
+  fields. Generated from the source by `bin/api-reference.php`, with a test that
+  fails if it drifts. The tables in this README are the introduction; that file
+  is the contract.
+- **[CHANGELOG.md](CHANGELOG.md)** — what changed per release.
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — how to add a module, an integration,
+  or a fetcher, and the test conventions.
 
 ## Security
 
