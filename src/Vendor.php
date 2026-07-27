@@ -27,6 +27,22 @@ namespace Upsun;
 final class Vendor {
 
 	/**
+	 * Redirect hops followed while re-validating the scheme at each one.
+	 * Matches WordPress's own default so nothing that worked stops working.
+	 */
+	private const MAX_REDIRECTS = 5;
+
+	/**
+	 * Caps on what an external archive may cost us, in bytes. Both are far
+	 * above any real plugin or theme (the largest bundle demo themes ship is
+	 * an order of magnitude smaller), and both fail the fetch rather than
+	 * filling a mount: this runs on a container whose writable space is a
+	 * declared, finite mount, and the source is a third party.
+	 */
+	private const MAX_DOWNLOAD_BYTES = 268435456;    // 256 MB compressed.
+	private const MAX_UNCOMPRESSED_BYTES = 1073741824; // 1 GB expanded.
+
+	/**
 	 * Build a Composer package manifest from a normalized plugin/theme
 	 * header. Pure: no WordPress, no filesystem.
 	 *
@@ -822,33 +838,168 @@ final class Vendor {
 		// checksum/signature is available from these sources, so an http (or
 		// on-path-downgraded) URL is an injection sink: require https for
 		// remote fetches. file:// and local paths are for artifacts/tests.
-		if ( preg_match( '#^http://#i', $url ) ) {
+		if ( preg_match( '#^https://#i', $url ) ) {
+			return self::download_https( $url, $headers, $dest );
+		}
+
+		// Any other scheme — http:// above all — is refused outright.
+		if ( preg_match( '#^[a-z][a-z0-9+.-]*://#i', $url ) && ! preg_match( '#^file://#i', $url ) ) {
 			return false;
 		}
 
-		if ( preg_match( '#^https://#i', $url ) ) {
-			if ( ! function_exists( 'wp_remote_get' ) ) {
+		$path = preg_replace( '#^file://#', '', $url );
+
+		return is_file( $path ) && @copy( $path, $dest );
+	}
+
+	/**
+	 * Stream an https URL to $dest, following redirects one hop at a time.
+	 *
+	 * WordPress would follow up to five redirects itself, and only validates
+	 * them when reject_unsafe_urls is set — so an https URL redirecting to
+	 * http would silently downgrade the transport for the one fetch whose
+	 * bytes get committed and later executed. Following the chain here means
+	 * the https requirement is re-checked before every request, and the hop
+	 * count stays bounded.
+	 */
+	private static function download_https( string $url, array $headers, string $dest ): bool {
+		if ( ! function_exists( 'wp_remote_get' ) ) {
+			return false;
+		}
+
+		for ( $hop = 0; $hop <= self::MAX_REDIRECTS; $hop++ ) {
+			if ( ! preg_match( '#^https://#i', $url ) ) {
 				return false;
 			}
 
 			$response = wp_remote_get(
 				$url,
 				array(
-					'timeout'  => 120,
-					'headers'  => $headers,
-					'stream'   => true,
-					'filename' => $dest,
+					'timeout'             => 120,
+					'headers'             => $headers,
+					'stream'              => true,
+					'filename'            => $dest,
+					'redirection'         => 0,
+					'limit_response_size' => self::MAX_DOWNLOAD_BYTES,
 				)
 			);
 
-			return ! is_wp_error( $response )
-				&& (int) wp_remote_retrieve_response_code( $response ) < 400
-				&& is_file( $dest );
+			if ( is_wp_error( $response ) ) {
+				return false;
+			}
+
+			$code = (int) wp_remote_retrieve_response_code( $response );
+
+			if ( $code < 300 || $code >= 400 ) {
+				return $code < 400 && is_file( $dest );
+			}
+
+			// A streamed redirect still wrote its (empty or HTML) body to
+			// $dest; drop it before following, so a failed chain cannot leave
+			// a non-archive behind for a later step to read.
+			if ( is_file( $dest ) ) {
+				unlink( $dest );
+			}
+
+			$location = trim( (string) wp_remote_retrieve_header( $response, 'location' ) );
+
+			if ( '' === $location ) {
+				return false;
+			}
+
+			$next = self::absolute_url( $location, $url );
+
+			// Credentials must not follow a redirect off the origin they were
+			// issued for. The Fetcher contract permits auth headers on the
+			// resolved download (a licensed vendor may want
+			// "Authorization: Bearer <token>"), and the vendor endpoint is
+			// untrusted by design — so a hostile or compromised one could 302
+			// to a host it controls and collect the token. Browsers and curl
+			// drop Authorization across a host change for the same reason.
+			// All caller headers go, not a denylist: a vendor's credential may
+			// be in any header name, and pre-signed CDN redirects (the common
+			// pattern) carry their authorisation in the URL, so nothing
+			// legitimate needs them on the far side.
+			if ( self::origin_of( $next ) !== self::origin_of( $url ) ) {
+				$headers = array();
+			}
+
+			$url = $next;
 		}
 
-		$path = preg_replace( '#^file://#', '', $url );
+		return false;
+	}
 
-		return is_file( $path ) && @copy( $path, $dest );
+	/**
+	 * The scheme://host:port of a URL, for comparing one hop against the next.
+	 * Empty when it cannot be parsed, which never equals a real origin — so
+	 * unparseable means "treat as different" and drop the credentials.
+	 */
+	private static function origin_of( string $url ): string {
+		$parts = parse_url( $url );
+
+		if ( ! is_array( $parts ) || empty( $parts['scheme'] ) || empty( $parts['host'] ) ) {
+			return '';
+		}
+
+		$scheme = strtolower( $parts['scheme'] );
+
+		return sprintf(
+			'%s://%s:%d',
+			$scheme,
+			strtolower( $parts['host'] ),
+			$parts['port'] ?? ( 'https' === $scheme ? 443 : 80 )
+		);
+	}
+
+	/**
+	 * Whether a running uncompressed total is past what we will expand.
+	 *
+	 * Separated out because the cap itself is the part worth asserting and a
+	 * fixture archive declaring a gigabyte is not practical to ship.
+	 *
+	 * @internal
+	 */
+	public static function exceeds_uncompressed_cap( int $bytes ): bool {
+		return $bytes > self::MAX_UNCOMPRESSED_BYTES;
+	}
+
+	/**
+	 * Resolve a Location header against the URL it came from. Only enough of
+	 * RFC 3986 to handle what real download endpoints send: absolute URLs,
+	 * protocol-relative URLs, absolute paths, and same-directory relative
+	 * paths.
+	 */
+	private static function absolute_url( string $location, string $base ): string {
+		if ( preg_match( '#^[a-z][a-z0-9+.-]*://#i', $location ) ) {
+			return $location;
+		}
+
+		$parts = parse_url( $base );
+
+		if ( ! is_array( $parts ) || empty( $parts['scheme'] ) || empty( $parts['host'] ) ) {
+			return '';
+		}
+
+		// Protocol-relative (//cdn.example/pkg.zip): a different host, the same
+		// scheme. Checked before the absolute-path branch, which would
+		// otherwise read the leading slash and keep us on the original host
+		// with a malformed path. The scheme carried over is the one we just
+		// used, so the https requirement still holds on the next hop.
+		if ( 0 === strpos( $location, '//' ) ) {
+			return $parts['scheme'] . ':' . $location;
+		}
+
+		$origin = $parts['scheme'] . '://' . $parts['host']
+			. ( isset( $parts['port'] ) ? ':' . (int) $parts['port'] : '' );
+
+		if ( '' !== $location && '/' === $location[0] ) {
+			return $origin . $location;
+		}
+
+		$directory = isset( $parts['path'] ) ? preg_replace( '#/[^/]*$#', '/', $parts['path'] ) : '/';
+
+		return $origin . ( '' === (string) $directory ? '/' : $directory ) . $location;
 	}
 
 	/**
@@ -872,7 +1023,11 @@ final class Vendor {
 		// Zip-slip guard: refuse archives with absolute or parent-traversing
 		// entries before extracting anything. libzip mostly sanitizes these,
 		// but the archive is external input, so validate explicitly rather
-		// than rely on version-dependent behavior.
+		// than rely on version-dependent behavior. The same pass totals the
+		// declared uncompressed size, so a bomb is refused before it is
+		// written rather than after it has filled the mount.
+		$uncompressed = 0;
+
 		for ( $i = 0; $i < $archive->numFiles; $i++ ) {
 			$entry = $archive->getNameIndex( $i );
 
@@ -886,6 +1041,14 @@ final class Vendor {
 				&& ( '/' === $normalized[0]
 					|| preg_match( '#^[A-Za-z]:#', $normalized )
 					|| preg_match( '#(^|/)\.\.(/|$)#', $normalized ) ) ) {
+				$archive->close();
+				return null;
+			}
+
+			$stat          = $archive->statIndex( $i );
+			$uncompressed += is_array( $stat ) ? (int) ( $stat['size'] ?? 0 ) : 0;
+
+			if ( self::exceeds_uncompressed_cap( $uncompressed ) ) {
 				$archive->close();
 				return null;
 			}
@@ -929,9 +1092,27 @@ final class Vendor {
 		rmdir( $path );
 	}
 
+	/**
+	 * A private work directory for one re-vendor run.
+	 *
+	 * The downloaded package sits here before it is committed, so the name is
+	 * unpredictable and the mode is owner-only: on a container with any other
+	 * process (or a shared /tmp), a guessable name plus an unchecked mkdir
+	 * would let something else pre-create the directory and read or swap the
+	 * package between download and commit. mkdir() failing is fatal here for
+	 * the same reason — falling through to a directory we do not own is the
+	 * outcome worth preventing.
+	 */
 	private static function temp_dir(): string {
-		$dir = rtrim( sys_get_temp_dir(), '/' ) . '/upsun-vendor-' . uniqid( '', true );
-		mkdir( $dir, 0755, true );
+		$dir = sprintf(
+			'%s/upsun-vendor-%s',
+			rtrim( sys_get_temp_dir(), '/' ),
+			bin2hex( random_bytes( 16 ) )
+		);
+
+		if ( ! @mkdir( $dir, 0700, true ) || ! is_dir( $dir ) ) {
+			throw new \RuntimeException( sprintf( 'Failed to create work directory %s.', $dir ) );
+		}
 
 		return $dir;
 	}

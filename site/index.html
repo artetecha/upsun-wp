@@ -62,7 +62,7 @@
         Off-platform it <strong>fully no-ops</strong> — local dev and CI need no special-casing.
       </p>
       <ul class="badge-row" aria-label="Project facts">
-        <li class="badge badge-version">v0.7.0</li>
+        <li class="badge badge-version">v0.8.0</li>
         <li class="badge">MIT</li>
         <li class="badge">PHP 8.1+</li>
         <li class="badge">WordPress 6.0+</li>
@@ -602,6 +602,7 @@
           <li><strong>0.5.0</strong> — premium plugin vendoring toolkit: <code>wp upsun vendor</code> exports an installed plugin/theme as a Composer package, <code>--check-updates</code> flags premium updates Composer won’t catch, and <code>--update</code> re-vendors the new version via a pluggable <code>Fetcher</code> registry (built-in <code>TransientFetcher</code>), merging over the upstream <code>composer.json</code>. <strong>Credentials from site state, never env.</strong></li>
           <li><strong>0.6.0</strong> — built-in <code>ThimPressFetcher</code> (Eduma, thim-core, LearnPress add-ons), conditionally active like the integrations; a <code>--dry-run --format=json</code> resolve contract for CI (the download token is never emitted); and a <code>vendor_fetchers</code> report in <code>wp upsun doctor</code>, Site Health, and the dashboard</li>
           <li><strong>0.7.0</strong> — the road to 1.0, and no new features on purpose. Every public filter, constant, command and interface was audited and given a freeze verdict; the internals stopped pretending to be API (<code>@internal</code>); a WordPress integration harness landed alongside the unit suite, with CI across PHP 8.1→8.5 and WordPress 6.0 to 7.x; and the last pre-1.0 window was used to fix the names that were wrong — six filters renamed, eight per-module toggles replaced by one <code>upsun_module_enabled</code> that covers <em>all</em> modules instead of eight. <strong>Nothing breaks:</strong> every old name still works and warns until 1.0</li>
+          <li><strong>0.8.0</strong> — a security review of the privileged surfaces, and the documentation a 1.0 promise needs. The vendoring engine downloads code you then commit and execute, so it got the hard look: an <code>https</code> package download could be redirected to <code>http</code> and silently downgraded — fixed by re-checking the scheme at every redirect hop — plus bounds on download and expansion size, and a private work directory. <a href="https://github.com/artetecha/upsun-wp/blob/main/docs/threat-model.md">A written threat model</a> states the guards <em>and</em> the risks knowingly accepted, and <a href="https://github.com/artetecha/upsun-wp/blob/main/docs/api-reference.md">an API reference generated from the source</a> — with a test that fails if it drifts — replaces trusting the docs to keep up</li>
         </ul>
       </div>
       <div class="roadmap-col">

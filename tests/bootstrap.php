@@ -225,6 +225,79 @@ function wp_cache_flush() {
 	return true;
 }
 
+/**
+ * HTTP stubs. Tests queue responses in $GLOBALS['upsun_test_http']['queue']
+ * (each: [ 'code' => int, 'headers' => array, 'body' => string, 'error' => string ])
+ * and read the requests made back from ['requests']. A queued 'body' is written
+ * to the stream target, mirroring WordPress's stream/filename behavior — which
+ * is what makes the redirect-chain assertions meaningful.
+ */
+$GLOBALS['upsun_test_http'] = array(
+	'queue'    => array(),
+	'requests' => array(),
+);
+
+function upsun_test_http_reset( array $queue = array() ): void {
+	$GLOBALS['upsun_test_http'] = array(
+		'queue'    => $queue,
+		'requests' => array(),
+	);
+}
+
+class UpsunTestWpError {
+
+	public function __construct( private string $message = 'error' ) {}
+
+	public function get_error_message(): string {
+		return $this->message;
+	}
+}
+
+function is_wp_error( $thing ) {
+	return $thing instanceof UpsunTestWpError;
+}
+
+function wp_remote_get( $url, $args = array() ) {
+	$GLOBALS['upsun_test_http']['requests'][] = array(
+		'url'  => $url,
+		'args' => $args,
+	);
+
+	$response = array_shift( $GLOBALS['upsun_test_http']['queue'] );
+
+	if ( null === $response ) {
+		return new UpsunTestWpError( 'no queued response' );
+	}
+
+	if ( ! empty( $response['error'] ) ) {
+		return new UpsunTestWpError( (string) $response['error'] );
+	}
+
+	// WordPress writes the body to the target file when streaming, whatever
+	// the status code — including on a redirect.
+	if ( ! empty( $args['stream'] ) && ! empty( $args['filename'] ) ) {
+		file_put_contents( $args['filename'], (string) ( $response['body'] ?? '' ) );
+	}
+
+	return array(
+		'code'    => (int) ( $response['code'] ?? 200 ),
+		'headers' => array_change_key_case( (array) ( $response['headers'] ?? array() ) ),
+		'body'    => (string) ( $response['body'] ?? '' ),
+	);
+}
+
+function wp_remote_retrieve_response_code( $response ) {
+	return is_array( $response ) ? ( $response['code'] ?? 0 ) : 0;
+}
+
+function wp_remote_retrieve_header( $response, $name ) {
+	return is_array( $response ) ? ( $response['headers'][ strtolower( (string) $name ) ] ?? '' ) : '';
+}
+
+function wp_remote_retrieve_body( $response ) {
+	return is_array( $response ) ? (string) ( $response['body'] ?? '' ) : '';
+}
+
 // Site-transient store for the vendored-updates check.
 $GLOBALS['upsun_test_site_transients'] = array();
 

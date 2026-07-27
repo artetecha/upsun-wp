@@ -186,6 +186,14 @@ class PageCache implements Module {
 
 		header( sprintf( 'Cache-Control: public, max-age=0, s-maxage=%d', $ttl ) );
 
+		/**
+		 * Filters whether to add an X-Upsun-MU marker header identifying the
+		 * response as one this module made cacheable. Useful when debugging a
+		 * caching verdict against a live route; off by default because it
+		 * advertises the plugin on every anonymous response.
+		 *
+		 * @param bool $enabled Default false.
+		 */
 		if ( apply_filters( 'upsun_page_cache_debug_headers', false ) ) {
 			header( 'X-Upsun-MU: page-cache' );
 		}

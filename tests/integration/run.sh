@@ -280,6 +280,17 @@ wpcli upsun doctor || die 'wp upsun doctor exited non-zero'
 
 say "Serving ${SITE_URL}"
 
+# WordPress spawns wp-cron through a loopback request to itself on front-end
+# hits. The PHP built-in server is single-process by default, so that request
+# arrives while the server is busy answering the one that triggered it and gets
+# dropped — which showed up as an intermittent "curl: (52) Empty reply from
+# server" here. Both halves are fixed: DISABLE_WP_CRON is what this plugin's own
+# doctor check tells you to set on Upsun anyway (cron belongs in the platform
+# scheduler), and the workers make the server able to answer a second connection
+# regardless.
+wpcli config set DISABLE_WP_CRON true --raw
+export PHP_CLI_SERVER_WORKERS=4
+
 # A listener already on the port would answer the assertions below from
 # somewhere else entirely — a false green. Best-effort pre-flight; the
 # authoritative check is that our own server is alive after the wait.
@@ -312,8 +323,25 @@ if ! curl -fsS -o /dev/null "${SITE_URL}/"; then
 	die 'built-in server never answered'
 fi
 
-ANON_HEADERS=$(curl -sS -D - -o /dev/null "${SITE_URL}/")
-COOKIE_HEADERS=$(curl -sS -D - -o /dev/null -H 'Cookie: wordpress_logged_in_harness=1' "${SITE_URL}/")
+# Header fetches get a bounded retry: an empty reply from a dev server is worth
+# one more attempt, but a persistently broken response must still fail the run
+# (with the server log, which is where the reason will be).
+fetch_headers() {
+	local attempt output
+	for attempt in 1 2 3; do
+		if output=$(curl -fsS -D - -o /dev/null "$@" 2>/dev/null); then
+			printf '%s' "${output}"
+			return 0
+		fi
+		sleep 1
+	done
+
+	cat "${WORK_DIR}/server.log" >&2
+	die "no usable response from ${SITE_URL} after 3 attempts (curl args: $*)"
+}
+
+ANON_HEADERS=$(fetch_headers "${SITE_URL}/")
+COOKIE_HEADERS=$(fetch_headers -H 'Cookie: wordpress_logged_in_harness=1' "${SITE_URL}/")
 
 # Present in the anonymous response.
 expect() {

@@ -99,6 +99,14 @@ class Cloudflare implements Module {
 		add_filter( 'upsun_site_health_tests', array( $this, 'add_health_check' ) );
 		add_filter( 'upsun_dashboard_panels', array( $this, 'add_dashboard_panel' ) );
 
+		/**
+		 * Filters whether a post's own URL is purged from the Cloudflare edge
+		 * when the post changes. Off by default: purging is an API call per
+		 * change, and which URLs matter is site-specific — see
+		 * upsun_cloudflare_post_purge_urls to widen the set.
+		 *
+		 * @param bool $enabled Default false.
+		 */
 		if ( apply_filters( 'upsun_cloudflare_auto_purge', false ) ) {
 			add_action( 'clean_post_cache', array( $this, 'purge_post' ), 10, 2 );
 		}
