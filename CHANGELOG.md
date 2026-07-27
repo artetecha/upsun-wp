@@ -9,7 +9,7 @@ Pre-1.0, breaking changes may land in a minor — they are called out under
 least one release. From 1.0 the [deprecation
 policy](docs/api-reference.md#deprecation-policy) applies.
 
-## 0.8.0 — unreleased
+## 0.8.0 — 2026-07-27
 
 Security review of the privileged surfaces, and the documentation a 1.0
 commitment needs.
