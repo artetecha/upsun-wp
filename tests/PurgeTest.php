@@ -180,6 +180,76 @@ final class PurgeTest extends TestCase {
 		$this->assertSame( 'zone is wrong', $result['message'] );
 	}
 
+	/* ---- A throwing backend ------------------------------------------- */
+
+	/**
+	 * A backend is consumer code talking to a third-party API, so it may throw
+	 * where its author meant to return false. That must not take down the
+	 * caller — typically a post-publish hook — nor skip the fallback the
+	 * dispatch chain exists to allow.
+	 */
+	public function test_a_throwing_backend_does_not_escape_and_the_chain_continues(): void {
+		add_filter(
+			'upsun_purge_backends',
+			static fn ( array $b ) => $b + array(
+				'throws'   => static function ( array $urls ) {
+					throw new RuntimeException( 'connection reset' );
+				},
+				'fallback' => static fn ( array $urls ) => true,
+			)
+		);
+
+		$result = Upsun\purge_paths();
+
+		$this->assertTrue( $result['purged'] );
+		$this->assertSame( 'fallback', $result['backend'] );
+	}
+
+	public function test_a_throwing_backend_is_reported_when_nothing_else_succeeds(): void {
+		add_filter(
+			'upsun_purge_backends',
+			static fn ( array $b ) => $b + array(
+				'throws' => static function ( array $urls ) {
+					throw new RuntimeException( 'connection reset' );
+				},
+			)
+		);
+
+		$result = Upsun\purge_paths();
+
+		$this->assertFalse( $result['purged'] );
+		$this->assertStringContainsString( 'throws purge backend errored', $result['message'] );
+		$this->assertStringContainsString( 'connection reset', $result['message'] );
+	}
+
+	/* ---- The message names what is actually there ---------------------- */
+
+	/**
+	 * The facade is backend-agnostic, so a consumer running only Fastly must
+	 * not be told to configure a CDN they do not use.
+	 */
+	public function test_the_message_does_not_mention_cloudflare_for_other_backends(): void {
+		add_filter(
+			'upsun_purge_backends',
+			static fn ( array $b ) => $b + array( 'fastly' => static fn ( array $urls ) => false )
+		);
+
+		$message = Upsun\purge_paths()['message'];
+
+		$this->assertStringContainsString( 'fastly', $message );
+		$this->assertStringNotContainsString( 'CLOUDFLARE', $message );
+		$this->assertStringContainsString( 'no purge API', $message );
+	}
+
+	public function test_the_message_names_cloudflare_credentials_when_it_declined(): void {
+		( new Cloudflare() )->register();
+
+		$message = Upsun\purge_paths()['message'];
+
+		$this->assertStringContainsString( 'cloudflare', $message );
+		$this->assertStringContainsString( 'CLOUDFLARE_ZONE_ID', $message );
+	}
+
 	public function test_non_callable_entries_are_ignored(): void {
 		add_filter( 'upsun_purge_backends', static fn ( array $b ) => $b + array( 'junk' => 'not-callable' ) );
 

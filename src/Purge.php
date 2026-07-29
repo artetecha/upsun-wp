@@ -42,16 +42,30 @@ final class Purge {
 			);
 		}
 
+		$declined = array();
+		$threw    = array();
+
 		foreach ( $backends as $id => $backend ) {
 			if ( ! is_callable( $backend ) ) {
 				continue;
 			}
 
-			$result = call_user_func( $backend, $urls );
+			// A backend is consumer code reaching a third-party API, so it may
+			// throw where its author meant to return false. Letting that
+			// propagate would take down whatever called us — a post-publish
+			// hook, typically — and skip any fallback registered behind it,
+			// which is exactly what the dispatch chain exists to allow. Treated
+			// as a failed attempt: carry on, and report it if nothing else
+			// succeeds.
+			try {
+				$result = call_user_func( $backend, $urls );
+			} catch ( \Throwable $exception ) {
+				$threw[ (string) $id ] = $exception->getMessage();
+				continue;
+			}
 
-			// A backend returns true on success, or false/WP_Error to decline
-			// or fail. Declining passes the request to the next one, so a
-			// consumer can register a fallback behind Cloudflare.
+			// true on success; false to decline (pass it along); WP_Error to
+			// fail loudly and stop.
 			if ( true === $result ) {
 				return array(
 					'purged'  => true,
@@ -76,31 +90,63 @@ final class Purge {
 					'message' => $result->get_error_message(),
 				);
 			}
-		}
 
-		// Both paths carry the platform explanation, because they need the same
-		// action from the reader. "Every backend declined" on its own is the
-		// common case on a site with the cloudflare module loaded and no purge
-		// credentials — and it tells an operator nothing they can act on.
-		$explanation = __( 'The Upsun router cache has no purge API — pages expire by TTL or on redeploy. Set Cloudflare purge credentials (CLOUDFLARE_ZONE_ID / CLOUDFLARE_API_TOKEN) so the cloudflare module can purge the edge, or register a backend through upsun_purge_backends.', 'upsun-mu-plugin' );
+			$declined[] = (string) $id;
+		}
 
 		return array(
 			'purged'  => false,
 			'backend' => null,
 			'urls'    => $urls,
-			'message' => array() === $backends
-				? __( 'No shared-cache purge backend is registered.', 'upsun-mu-plugin' ) . ' ' . $explanation
-				: sprintf(
-					/* translators: %d: number of registered backends. */
-					_n(
-						'%d registered purge backend declined the request (not configured).',
-						'All %d registered purge backends declined the request (none configured).',
-						count( $backends ),
-						'upsun-mu-plugin'
-					),
-					count( $backends )
-				) . ' ' . $explanation,
+			'message' => self::nothing_purged_message( $declined, $threw ),
 		);
+	}
+
+	/**
+	 * Explain a purge that found no backend willing to do it.
+	 *
+	 * Names the backends involved rather than counting them, and only mentions
+	 * Cloudflare's environment variables when Cloudflare is actually one of
+	 * them — a consumer running a Fastly backend should not be told to
+	 * configure a CDN they do not use. The router limitation is stated either
+	 * way, because it is the reason this can happen at all.
+	 *
+	 * @param string[]              $declined Backend ids that passed the request along.
+	 * @param array<string, string> $threw    Backend id => exception message.
+	 */
+	private static function nothing_purged_message( array $declined, array $threw ): string {
+		$parts = array();
+
+		if ( array() === $declined && array() === $threw ) {
+			$parts[] = __( 'No shared-cache purge backend is registered.', 'upsun-mu-plugin' );
+		}
+
+		if ( array() !== $declined ) {
+			$parts[] = sprintf(
+				/* translators: %s: comma-separated backend ids. */
+				__( 'These purge backends declined the request, so none is configured to run it: %s.', 'upsun-mu-plugin' ),
+				implode( ', ', $declined )
+			);
+		}
+
+		foreach ( $threw as $id => $message ) {
+			$parts[] = sprintf(
+				/* translators: 1: backend id, 2: error message. */
+				__( 'The %1$s purge backend errored: %2$s', 'upsun-mu-plugin' ),
+				$id,
+				$message
+			);
+		}
+
+		$parts[] = __( 'The Upsun router cache has no purge API — pages expire by TTL or on redeploy.', 'upsun-mu-plugin' );
+
+		if ( in_array( 'cloudflare', $declined, true ) ) {
+			$parts[] = __( 'Set CLOUDFLARE_ZONE_ID and CLOUDFLARE_API_TOKEN so the cloudflare module can purge the edge.', 'upsun-mu-plugin' );
+		} elseif ( array() === $declined && array() === $threw ) {
+			$parts[] = __( 'Front the site with Cloudflare, or register a backend through upsun_purge_backends.', 'upsun-mu-plugin' );
+		}
+
+		return implode( ' ', $parts );
 	}
 
 	/**
@@ -111,11 +157,14 @@ final class Purge {
 	public static function backends(): array {
 		/**
 		 * Filters the shared-cache purge backends, in dispatch order: the
-		 * first one to return true wins, and returning false passes the
-		 * request along. A backend receives absolute URLs, or an empty array
-		 * meaning "everything you can invalidate".
+		 * first one to return true wins, returning false passes the request
+		 * along, and a WP_Error stops the chain and is reported. A backend
+		 * receives absolute URLs, or an empty array meaning "everything you can
+		 * invalidate". A backend that throws is treated as a failed attempt —
+		 * the exception is caught and reported, never propagated to the caller,
+		 * and the next backend still gets its turn.
 		 *
-		 * @param array<string, callable> $backends id => callable.
+		 * @param array<string, callable> $backends id => callable( string[] $urls ): true|false|WP_Error.
 		 */
 		$backends = (array) apply_filters( 'upsun_purge_backends', array() );
 
