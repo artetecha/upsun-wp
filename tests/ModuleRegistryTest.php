@@ -51,7 +51,7 @@ final class ModuleRegistryTest extends TestCase {
 
 	public function test_boot_is_a_noop_off_platform(): void {
 		add_filter(
-			'upsun_mu_modules',
+			'upsun_modules',
 			function () {
 				return array( 'test' => UpsunTestModule::class );
 			}
@@ -66,7 +66,7 @@ final class ModuleRegistryTest extends TestCase {
 		$this->on_platform();
 
 		add_filter(
-			'upsun_mu_modules',
+			'upsun_modules',
 			function () {
 				return array( 'test' => UpsunTestModule::class );
 			}
@@ -81,7 +81,7 @@ final class ModuleRegistryTest extends TestCase {
 		$this->on_platform();
 
 		add_filter(
-			'upsun_mu_modules',
+			'upsun_modules',
 			function () {
 				return array( 'disabled' => UpsunTestDisabledModule::class );
 			}
@@ -96,7 +96,7 @@ final class ModuleRegistryTest extends TestCase {
 		$this->on_platform();
 
 		add_filter(
-			'upsun_mu_modules',
+			'upsun_modules',
 			function () {
 				return array();
 			}
@@ -111,7 +111,7 @@ final class ModuleRegistryTest extends TestCase {
 		$this->on_platform();
 
 		add_filter(
-			'upsun_mu_modules',
+			'upsun_modules',
 			function () {
 				return array(
 					'test'     => UpsunTestModule::class,
@@ -193,27 +193,13 @@ final class ModuleRegistryTest extends TestCase {
 		$this->assertSame( 'constant', ModuleRegistry::status()['fake-precedence']['state'] );
 	}
 
-	/**
-	 * The renamed map filter: both names work, canonical last.
-	 */
-	public function test_the_module_map_filter_accepts_both_names(): void {
-		$this->on_platform();
-
-		add_filter( 'upsun_mu_modules', fn () => array( 'test' => UpsunTestModule::class ) );
-
-		ModuleRegistry::boot();
-
-		$this->assertSame( 1, UpsunTestModule::$registered );
-		$this->assertArrayHasKey( 'upsun_mu_modules', $GLOBALS['upsun_test_deprecated'] );
-	}
-
 	public function test_status_reports_constant_disabled_modules(): void {
 		$this->on_platform();
 
 		define( 'UPSUN_DISABLE_FAKE_MODULE', true );
 
 		add_filter(
-			'upsun_mu_modules',
+			'upsun_modules',
 			function () {
 				return array( 'fake-module' => UpsunTestModule::class );
 			}
@@ -235,7 +221,7 @@ final class ModuleRegistryTest extends TestCase {
 		$this->on_platform();
 
 		add_filter(
-			'upsun_mu_modules',
+			'upsun_modules',
 			function () {
 				return array(
 					'ghost' => 'Upsun\\Does\\Not\\Exist',

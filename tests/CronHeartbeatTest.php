@@ -114,9 +114,9 @@ final class CronHeartbeatTest extends TestCase {
 	}
 
 	/**
-	 * Boot gating moved to ModuleRegistry in 0.7 (upsun_module_enabled, plus
-	 * the deprecated name), so should_load() no longer reads a filter. The
-	 * gating itself — old name and new — is covered in ModuleRegistryTest.
+	 * Boot gating lives in ModuleRegistry (upsun_module_enabled), so
+	 * should_load() reads no filter. The per-module toggle it used to read was
+	 * deprecated in 0.7 and removed in 1.0: registering it does nothing.
 	 */
 	public function test_should_load_is_unconditional(): void {
 		$this->assertTrue( ( new CronHeartbeat() )->should_load() );

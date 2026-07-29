@@ -14,7 +14,6 @@
 
 namespace Upsun\Modules;
 
-use Upsun\Deprecations;
 use Upsun\Environment;
 use Upsun\Module;
 use Upsun\RelationshipHealth;
@@ -152,11 +151,7 @@ class MountUsage implements Module {
 		 *
 		 * @param array{0: int, 1: int} $thresholds Default [ 80, 95 ] (warn, fail).
 		 */
-		$thresholds = (array) Deprecations::filter(
-			'upsun_mount_usage_thresholds',
-			'upsun_disk_usage_thresholds',
-			array( 80, 95 )
-		);
+		$thresholds = (array) apply_filters( 'upsun_mount_usage_thresholds', array( 80, 95 ) );
 		$warn       = (int) ( $thresholds[0] ?? 80 );
 		$fail       = (int) ( $thresholds[1] ?? 95 );
 		$used_pct   = 100 * ( $total - $free ) / $total;

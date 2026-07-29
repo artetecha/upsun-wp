@@ -19,7 +19,7 @@ loader shim), and wire the post_deploy hook.
 // composer.json
 {
   "require": {
-    "artetecha/upsun-wp": "^0.8"
+    "artetecha/upsun-wp": "^1.0"
   }
 }
 ```
@@ -158,11 +158,11 @@ Defined by the plugin, readable by consumers: `UPSUN_MU_PLUGIN_DIR` (the plugin'
 
 Module boot is deferred to `muplugins_loaded` priority 0, so **any mu-plugin** can register these regardless of load order.
 
-> **Renamed in 0.7.** Seven filters were renamed and eight per-module `*_enabled`
-> toggles were replaced by `upsun_module_enabled`. **Every old name still works**
-> — it is applied first and its result feeds the new one — and WordPress logs a
-> deprecation notice only if you actually registered a callback on it. The old
-> names are removed at 1.0; see [Deprecations](#deprecations) for the mapping.
+> **Frozen at 1.0.** These names change only through the
+> [deprecation policy](docs/api-reference.md#deprecation-policy). The seven
+> renames and eight toggle replacements introduced in 0.7 had their shims removed
+> at 1.0 — see [Upgrading from 0.x](#upgrading-from-0x) if you are coming from 0.6
+> or earlier.
 
 | Filter | Type | Default | Purpose |
 |---|---|---|---|
@@ -217,26 +217,28 @@ Module boot is deferred to `muplugins_loaded` priority 0, so **any mu-plugin** c
 |---|---|
 | `upsun_preview_sanitize` (`?string $previous, string $current`) | When `wp upsun sanitize` runs (typically `--if-needed` from the post_deploy hook after a clone or data sync, detected via the `upsun_environment_stamp` option), from the dashboard "Run sanitize actions now" button, or at boot if `upsun_safe_previews_boot_check` is enabled. Scrub or reconfigure site-specific integrations here; callbacks must be idempotent. |
 
-### Deprecations
+### Upgrading from 0.x
 
-0.7 was the last pre-1.0 window for breaking changes, so the filter names that
-were wrong were fixed rather than frozen. **Nothing breaks now:** each old name
-is applied first and its result feeds the canonical one, so a callback on the old
-name still decides unless something also registers the new one. WordPress emits a
-deprecation notice through `_deprecated_hook()` when a callback is attached to an
-old name **and `WP_DEBUG` is on** — so you see these on a debug environment, and
-sites that never used them see nothing either way.
+**The API is frozen as of 1.0.** Filters, constants, the action, the helper
+functions, the extension interfaces, and the `wp upsun` subcommands with their
+`--format=json` field names will not change without a deprecation cycle — see the
+[policy](docs/api-reference.md#deprecation-policy).
 
-| Removed at 1.0 | Use instead | Why |
-|---|---|---|
-| `upsun_mu_modules` | `upsun_modules` | "mu" is a delivery detail, and it was the only registry filter carrying it |
-| `upsun_writable_path_requirements` | `upsun_writable_paths_requirements` | singular/plural mismatch with its own module |
-| `upsun_disk_usage_thresholds` | `upsun_mount_usage_thresholds` | the prefix named neither its module nor a shared concept |
-| `upsun_login_banner` | `upsun_environment_indicator_login_banner` | bare name read as global; it belongs to that module |
-| `upsun_sanitize_anonymize_passwords` | `upsun_sanitize_anonymize_user_passwords` | its sibling is `..._anonymize_user_emails` |
-| `upsun_safe_previews_pause_webhooks` | `upsun_woocommerce_pause_webhooks` | declared by the WooCommerce integration, not the module |
-| `upsun_safe_previews_stripe_test_mode` | `upsun_woocommerce_stripe_test_mode` | same |
-| `upsun_cloudflare_enabled`, `upsun_security_headers_enabled`, `upsun_environment_indicator_enabled`, `upsun_dashboard_enabled`, `upsun_cron_heartbeat_enabled`, `upsun_safe_previews_enabled`, `upsun_writable_paths_enabled`, `upsun_mount_usage_enabled` | `upsun_module_enabled` (`bool $enabled, string $id`) | eight of thirteen modules had one, so five had no conditional switch at all |
+1.0 removed the shims 0.7 introduced. If you are coming from **0.6 or earlier**,
+seven filters were renamed and eight per-module toggles were replaced; the old
+names worked throughout 0.7 and are now gone. Coming from 0.7 with no deprecation
+notices in your logs, there is nothing to do.
+
+| Removed in 1.0 | Use instead |
+|---|---|
+| `upsun_mu_modules` | `upsun_modules` |
+| `upsun_writable_path_requirements` | `upsun_writable_paths_requirements` |
+| `upsun_disk_usage_thresholds` | `upsun_mount_usage_thresholds` |
+| `upsun_login_banner` | `upsun_environment_indicator_login_banner` |
+| `upsun_sanitize_anonymize_passwords` | `upsun_sanitize_anonymize_user_passwords` |
+| `upsun_safe_previews_pause_webhooks` | `upsun_woocommerce_pause_webhooks` |
+| `upsun_safe_previews_stripe_test_mode` | `upsun_woocommerce_stripe_test_mode` |
+| `upsun_cloudflare_enabled`, `upsun_security_headers_enabled`, `upsun_environment_indicator_enabled`, `upsun_dashboard_enabled`, `upsun_cron_heartbeat_enabled`, `upsun_safe_previews_enabled`, `upsun_writable_paths_enabled`, `upsun_mount_usage_enabled` | `upsun_module_enabled` (`bool $enabled, string $id`) — covers all 13 modules |
 
 Migrating a per-module toggle:
 
@@ -248,12 +250,41 @@ add_filter( 'upsun_dashboard_enabled', '__return_false' );
 add_filter( 'upsun_module_enabled', fn ( $enabled, $id ) => 'dashboard' !== $id && $enabled, 10, 2 );
 ```
 
-**Removed outright in 0.7:** `upsun_cloudflare_restore_remote_addr`, and with it
-the `REMOTE_ADDR` rewriting it gated and the `$_SERVER['UPSUN_ORIGINAL_REMOTE_ADDR']`
-key it wrote. The Upsun router resolves the real client IP before PHP runs, so on
-this platform the filter's only reachable effect was letting a forged
-`CF-Connecting-IP` override a correct value on a direct origin hit. The
-`cloudflare` module verifies the client IP (health check) instead of rewriting it.
+Also gone since 0.6: `upsun_cloudflare_restore_remote_addr`, and the
+`REMOTE_ADDR` rewriting it gated. The Upsun router resolves the real client IP
+before PHP runs, so on this platform the filter's only reachable effect was
+letting a forged `CF-Connecting-IP` override a correct value on a direct origin
+hit. The `cloudflare` module verifies the client IP instead.
+
+## Scope
+
+What this package commits to at 1.0, and what it deliberately leaves alone.
+
+**In scope.** Environment awareness; router-cache friendliness; read-only
+filesystem UX; safe preview clones; deploy migrations; Upsun-specific Site Health
+and `wp upsun doctor` checks; the vendoring toolkit for premium packages; and
+shared-cache invalidation through `Upsun\purge_paths()` — Cloudflare-backed
+today, with `upsun_purge_backends` open for Fastly, Varnish, or the Upsun router
+itself if it ever ships purging.
+
+**Out of scope, and why.**
+
+- **Multisite.** Delegated to `upsun/wp-ms-dbu`. The domain-mapping and
+  per-site-DB concerns are a project of their own, and nobody consuming this has
+  asked.
+- **Maintenance mode and an activity log.** Both are site-policy features, not
+  platform integration. A consumer can build either on the public filters.
+- **ElasticPress auto-wiring.** Deferred until a consumer actually runs a search
+  service; guessing at the mapping would age badly.
+- **Purging the Upsun router cache directly.** No API exists. Pages expire by TTL
+  or on redeploy, and `purge_paths()` says so plainly when nothing else fronts the
+  site rather than pretending otherwise.
+- **A wordpress.org listing.** mu-plugins are not activatable and the loader-shim
+  install step does not fit the plugin-directory model. Distribution is
+  Composer-first, permanently.
+- **Anything site-specific.** The line that has governed the package since 0.1:
+  if it is true of one site only, it belongs in that site's own mu-plugin, wired
+  through these filters.
 
 ### Deploy migrations
 
@@ -346,7 +377,27 @@ raising a PR per package stays your CI's job.
 
 `Upsun\is_upsun()`, `Upsun\environment_name()`, `Upsun\environment_type()`, `Upsun\is_production()`, `Upsun\is_preview_environment()`, `Upsun\branch()`, `Upsun\project_id()`, `Upsun\application_name()`, `Upsun\primary_route()`, `Upsun\routes()`, `Upsun\relationship( string $name )`, `Upsun\version()` — all safe to call off-platform.
 
-These twelve functions are the plugin's **only** supported PHP entry point for
+**`Upsun\purge_paths( array $paths = array() )`** — new in 1.0. Invalidate paths
+from whatever shared cache fronts the site, without your code having to know
+which one that is:
+
+```php
+$result = Upsun\purge_paths( array( '/', '/news/' ) );
+
+if ( ! $result['purged'] ) {
+    error_log( 'Upsun purge: ' . $result['message'] );
+}
+```
+
+Returns `{ purged: bool, backend: ?string, urls: string[], message: string }`.
+Paths resolve against the primary route; absolute URLs pass through; an empty
+array means "everything the backend can invalidate". The `cloudflare` module
+registers a backend when purge credentials are set, and `upsun_purge_backends`
+takes others (first to return `true` wins, `false` passes the request on). With
+nothing fronting the site it reports that plainly — **the Upsun router cache has
+no purge API**, and this says so instead of returning a misleading success.
+
+These functions are the plugin's **only** supported PHP entry point for
 reading the environment. The `Upsun\` classes behind them — including
 `Upsun\Environment` — are marked `@internal`: they may change in any release.
 Extension points are the filters above and the four interfaces (`Upsun\Module`,

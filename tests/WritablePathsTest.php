@@ -40,7 +40,7 @@ final class WritablePathsTest extends TestCase {
 
 	private function add_requirement( string $id, array $paths, $active = '__return_true', ?string $note = null ): void {
 		add_filter(
-			'upsun_writable_path_requirements',
+			'upsun_writable_paths_requirements',
 			function ( array $requirements ) use ( $id, $paths, $active, $note ) {
 				$requirements[ $id ] = array_filter(
 					array(
@@ -169,7 +169,9 @@ final class WritablePathsTest extends TestCase {
 	}
 
 	/**
-	 * Boot gating moved to ModuleRegistry in 0.7; see ModuleRegistryTest.
+	 * Boot gating lives in ModuleRegistry (see ModuleRegistryTest). The
+	 * per-module toggle this module used to read was deprecated in 0.7 and
+	 * removed in 1.0, so registering it must have no effect at all.
 	 */
 	public function test_should_load_is_unconditional(): void {
 		$this->assertTrue( ( new WritablePaths() )->should_load() );

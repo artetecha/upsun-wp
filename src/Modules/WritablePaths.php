@@ -20,7 +20,6 @@
 
 namespace Upsun\Modules;
 
-use Upsun\Deprecations;
 use Upsun\Environment;
 use Upsun\Module;
 
@@ -51,11 +50,7 @@ class WritablePaths implements Module {
 		 *
 		 * @param array $requirements id => [ 'label', 'active', 'paths', 'note' ].
 		 */
-		return (array) Deprecations::filter(
-			'upsun_writable_paths_requirements',
-			'upsun_writable_path_requirements',
-			array()
-		);
+		return (array) apply_filters( 'upsun_writable_paths_requirements', array() );
 	}
 
 	public function add_check( array $checks ): array {

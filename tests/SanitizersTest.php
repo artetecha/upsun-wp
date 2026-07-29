@@ -217,7 +217,7 @@ final class SanitizersTest extends TestCase {
 		$this->fake_preview_env();
 		$wpdb = $this->fake_wpdb();
 
-		add_filter( 'upsun_sanitize_anonymize_passwords', '__return_true' );
+		add_filter( 'upsun_sanitize_anonymize_user_passwords', '__return_true' );
 
 		$run = Sanitizers::run( false );
 
@@ -231,7 +231,7 @@ final class SanitizersTest extends TestCase {
 		$this->fake_preview_env();
 		$wpdb = $this->fake_wpdb();
 
-		add_filter( 'upsun_sanitize_anonymize_passwords', static fn () => 'password-{ID}' );
+		add_filter( 'upsun_sanitize_anonymize_user_passwords', static fn () => 'password-{ID}' );
 		add_filter( 'upsun_sanitize_preserved_emails', static fn () => array( 'keep@example.com' ) );
 
 		$dry = Sanitizers::run( true );

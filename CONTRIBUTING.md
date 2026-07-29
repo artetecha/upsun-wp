@@ -170,9 +170,9 @@ first: this is the one path where hostile input becomes committed, executed code
   headers. Dependency-free helpers in `lib.php`; the scripts run through
   `wp eval-file`.
 - **Structural guards** are used where a convention matters more than any single
-  case: `FilterApplicationTest` (each centralized filter applied exactly once),
-  `DeprecationsTest` (every shim covered), `ApiReferenceTest` (the reference is
-  not stale). If you add a convention, add its guard.
+  case: `FilterApplicationTest` (each centralized filter applied exactly once) and
+  `ApiReferenceTest` (the reference is not stale). If you add a convention, add
+  its guard.
 
 New behaviour needs a test that fails without it. If a bug is fixed, the test
 should be one that would have caught it — and it is worth checking that it does,
@@ -185,10 +185,13 @@ frozen at 1.0. Before then:
 
 1. **Adding** a filter, an array key, a JSON field, or an optional flag is
    additive and fine.
-2. **Renaming or removing** one goes through
-   [`Upsun\Deprecations`](src/Deprecations.php): add the pair to `RENAMED`, apply
-   the canonical name through `Deprecations::filter()`, and let the old name feed
-   it. `DeprecationsTest` will require a test for the new entry.
+2. **Renaming or removing** one is a **major-version change** now that the API is
+   frozen. The mechanism, when that time comes, is the one 0.7 used and 1.0
+   removed: apply the canonical name, feed it the result of
+   `apply_filters_deprecated( 'old_name', … )` so an existing callback still
+   decides, and keep the pair in one place so there is a single file to delete at
+   the removal. Look at the 0.7 tag for the shape (`src/Deprecations.php`), and
+   read the [policy](docs/api-reference.md#deprecation-policy) for the timing.
 3. **Regenerate the reference** — `php bin/api-reference.php` — and commit it.
    Document every filter with a docblock stating its `@param` type and
    `Default …`; the reference is built from those, so an undocumented filter

@@ -397,11 +397,7 @@ final class Sanitizers {
 		 *                          everyone; a string like 'password-{ID}'
 		 *                          gives per-user passwords.
 		 */
-		return Deprecations::filter(
-			'upsun_sanitize_anonymize_user_passwords',
-			'upsun_sanitize_anonymize_passwords',
-			false
-		);
+		return apply_filters( 'upsun_sanitize_anonymize_user_passwords', false );
 	}
 
 	/**

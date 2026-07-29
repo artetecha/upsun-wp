@@ -98,6 +98,7 @@ class Cloudflare implements Module {
 		add_action( 'init', array( $this, 'maybe_block_direct_origin' ), 0 );
 		add_filter( 'upsun_site_health_tests', array( $this, 'add_health_check' ) );
 		add_filter( 'upsun_dashboard_panels', array( $this, 'add_dashboard_panel' ) );
+		add_filter( 'upsun_purge_backends', array( $this, 'register_purge_backend' ) );
 
 		/**
 		 * Filters whether a post's own URL is purged from the Cloudflare edge
@@ -458,6 +459,31 @@ class Cloudflare implements Module {
 			'zone'  => $zone,
 			'token' => $token,
 		);
+	}
+
+	/**
+	 * Contribute this module as a backend for Upsun\purge_paths().
+	 *
+	 * Declines (returns false) rather than erroring when there are no purge
+	 * credentials, so on a site that is not fronted by Cloudflare the facade
+	 * moves on to the next backend and ends up reporting "nothing available"
+	 * instead of "Cloudflare failed" — which would be misleading.
+	 *
+	 * @param array<string, callable> $backends
+	 * @return array<string, callable>
+	 */
+	public function register_purge_backend( array $backends ): array {
+		$backends['cloudflare'] = function ( array $urls ) {
+			$credentials = self::credentials();
+
+			if ( '' === $credentials['zone'] || '' === $credentials['token'] ) {
+				return false;
+			}
+
+			return $this->purge( $urls );
+		};
+
+		return $backends;
 	}
 
 	/**

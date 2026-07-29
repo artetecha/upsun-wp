@@ -67,7 +67,7 @@ final class MountUsageTest extends TestCase {
 
 	public function test_verdict_thresholds_are_filterable(): void {
 		add_filter(
-			'upsun_disk_usage_thresholds',
+			'upsun_mount_usage_thresholds',
 			static fn () => array( 40, 60 )
 		);
 
@@ -162,7 +162,9 @@ final class MountUsageTest extends TestCase {
 	}
 
 	/**
-	 * Boot gating moved to ModuleRegistry in 0.7; see ModuleRegistryTest.
+	 * Boot gating lives in ModuleRegistry (see ModuleRegistryTest). The
+	 * per-module toggle this module used to read was deprecated in 0.7 and
+	 * removed in 1.0, so registering it must have no effect at all.
 	 */
 	public function test_should_load_is_unconditional(): void {
 		$this->assertTrue( ( new MountUsage() )->should_load() );

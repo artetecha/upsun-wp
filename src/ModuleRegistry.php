@@ -25,28 +25,6 @@ final class ModuleRegistry {
 	);
 
 	/**
-	 * The per-module boot filters replaced by upsun_module_enabled in 0.7.
-	 *
-	 * They covered eight of thirteen modules, so a consumer wanting a
-	 * conditional (per-environment) toggle could have one for eight modules
-	 * and had to fall back to a wp-config constant for the other five. The
-	 * generic filter covers all thirteen; these are honoured through
-	 * Deprecations until 1.0.
-	 *
-	 * @var array<string, string> module id => deprecated filter name.
-	 */
-	private const TOGGLES = array(
-		'cloudflare'            => 'upsun_cloudflare_enabled',
-		'security-headers'      => 'upsun_security_headers_enabled',
-		'environment-indicator' => 'upsun_environment_indicator_enabled',
-		'dashboard'             => 'upsun_dashboard_enabled',
-		'cron-heartbeat'        => 'upsun_cron_heartbeat_enabled',
-		'safe-previews'         => 'upsun_safe_previews_enabled',
-		'writable-paths'        => 'upsun_writable_paths_enabled',
-		'mount-usage'           => 'upsun_mount_usage_enabled',
-	);
-
-	/**
 	 * Per-module outcome of the last boot: id => [ class, state ].
 	 * States: loaded | constant | filter | disabled | missing | declined.
 	 *
@@ -84,7 +62,7 @@ final class ModuleRegistry {
 		 *
 		 * @param array<string, class-string<Module>> $modules id => class.
 		 */
-		$modules = (array) Deprecations::filter( 'upsun_modules', 'upsun_mu_modules', self::MODULES );
+		$modules = (array) apply_filters( 'upsun_modules', self::MODULES );
 
 		// Defaults absent from the filtered map were removed by a consumer.
 		foreach ( array_diff_key( self::MODULES, $modules ) as $id => $class ) {
@@ -161,20 +139,6 @@ final class ModuleRegistry {
 	 * the UPSUN_DISABLE_{MODULE} constants, available for every module.
 	 */
 	private static function enabled_by_filter( string $id ): bool {
-		$enabled = true;
-
-		if ( isset( self::TOGGLES[ $id ] ) ) {
-			// The module's own pre-0.7 toggle, honoured until 1.0. Its result
-			// feeds the generic filter below, so a consumer registering only
-			// the old name still decides.
-			$enabled = (bool) apply_filters_deprecated(
-				self::TOGGLES[ $id ],
-				array( $enabled ),
-				Deprecations::SINCE,
-				'upsun_module_enabled'
-			);
-		}
-
 		/**
 		 * Filters whether a single module boots, by id (the ids are the keys
 		 * of the upsun_modules map: 'page-cache', 'smtp', ...).
@@ -187,7 +151,7 @@ final class ModuleRegistry {
 		 * @param bool   $enabled Default true.
 		 * @param string $id      Module id.
 		 */
-		return (bool) apply_filters( 'upsun_module_enabled', $enabled, $id );
+		return (bool) apply_filters( 'upsun_module_enabled', true, $id );
 	}
 
 	private static function disabled_by_constant( string $id ): bool {

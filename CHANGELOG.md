@@ -9,6 +9,53 @@ Pre-1.0, breaking changes may land in a minor — they are called out under
 least one release. From 1.0 the [deprecation
 policy](docs/api-reference.md#deprecation-policy) applies.
 
+## 1.0.0 — unreleased
+
+**The public API is frozen.** Filters, constants, the action, the helper
+functions, the four extension interfaces, and the `wp upsun` subcommands with
+their `--format=json` field names now change only through the [deprecation
+policy](docs/api-reference.md#deprecation-policy): deprecate in a minor, remove in
+the next major, minimum two minors of overlap.
+
+### Added
+
+- **`Upsun\purge_paths( array $paths = array() )`** — invalidate paths from
+  whatever shared cache fronts the site, without the caller knowing which one.
+  Returns `{ purged, backend, urls, message }`. The `cloudflare` module registers
+  a backend when purge credentials are set; `upsun_purge_backends` takes others
+  (first to return `true` wins, `false` passes the request on). With nothing
+  fronting the site it reports that plainly — the Upsun router cache has no purge
+  API, and this says so rather than returning a misleading success. The last item
+  the roadmap had been holding open.
+- `upsun_purge_backends` filter.
+- A **Scope** section in the README: what 1.0 commits to, and what is
+  deliberately out (multisite, maintenance mode, activity log, ElasticPress
+  auto-wiring, purging the router cache directly, a wordpress.org listing) with
+  the reasoning for each.
+
+### Removed — breaking
+
+The shims 0.7 added are gone. Coming from 0.7 with no deprecation notices in your
+logs, there is nothing to do; coming from 0.6 or earlier, see [Upgrading from
+0.x](README.md#upgrading-from-0x).
+
+- The seven renamed filters: `upsun_mu_modules`,
+  `upsun_writable_path_requirements`, `upsun_disk_usage_thresholds`,
+  `upsun_login_banner`, `upsun_sanitize_anonymize_passwords`,
+  `upsun_safe_previews_pause_webhooks`, `upsun_safe_previews_stripe_test_mode`.
+- The eight per-module `*_enabled` toggles, replaced by `upsun_module_enabled`.
+- `Upsun\Deprecations` and its whole shim layer — one file, as designed.
+
+### Validation
+
+The generic-vs-site-specific boundary is now confirmed by a **second production
+consumer** (`artetecha/pergrazia`) consuming the package from Packagist at `^0.8`
+with 27 lines of site wiring and one filter, and nothing pushed upstream to make
+it work. Verified live on its preview environment: all 14 `wp upsun doctor` checks
+pass, deploy migrations applied, preview safety wired, and the response headers
+confirmed at the real Upsun edge (`x-platform-cache: HIT`, `noindex`, the three
+baseline security headers, no HSTS on a non-production HTTPS environment).
+
 ## 0.8.0 — 2026-07-27
 
 Security review of the privileged surfaces, and the documentation a 1.0
