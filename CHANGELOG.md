@@ -9,7 +9,7 @@ Pre-1.0, breaking changes may land in a minor — they are called out under
 least one release. From 1.0 the [deprecation
 policy](docs/api-reference.md#deprecation-policy) applies.
 
-## 1.0.0 — unreleased
+## 1.0.0 — 2026-07-31
 
 **The public API is frozen.** Filters, constants, the action, the helper
 functions, the four extension interfaces, and the `wp upsun` subcommands with
