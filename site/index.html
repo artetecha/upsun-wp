@@ -264,7 +264,7 @@
       <article class="card">
         <p class="card-kicker">cloudflare</p>
         <h3>Cloudflare-fronting, done right</h3>
-        <p>The Upsun router already hands your app the real client IP, so this doesn’t meddle with <code>REMOTE_ADDR</code> — it detects fronting from Cloudflare’s own headers and flags any mismatch in a health check. Adds the edge cache purge the router cache never had (<code>wp upsun cloudflare purge</code>) and an optional origin guard. Inert where Cloudflare isn’t in front.</p>
+        <p>The Upsun router already hands your app the real client IP, so this doesn’t meddle with <code>REMOTE_ADDR</code> — it detects fronting from Cloudflare’s own headers and flags any mismatch in a health check. Adds the edge cache purge the router cache never had — from the CLI (<code>wp upsun cloudflare purge</code>) or from code through the backend-agnostic <code>Upsun\purge_paths()</code> — plus an optional origin guard. Inert where Cloudflare isn’t in front.</p>
       </article>
       <article class="card">
         <p class="card-kicker">security-headers</p>

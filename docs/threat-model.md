@@ -190,6 +190,16 @@ arguments,** where anything reading `/proc` or `ps` on the container can see
 them, and they will be sent to whatever host the operator named. Prefer checking
 an environment without HTTP access control, or accept the exposure knowingly.
 
+**Purge backends are site code.** `Upsun\purge_paths()` dispatches to callables
+registered through `upsun_purge_backends`, which run with the site's privileges
+and receive the URL list — the same trust position as any other filter callback
+(see the boundary above). Two properties are deliberate: a backend that throws is
+caught and reported rather than propagated, so a hostile or merely buggy one
+cannot take down a publish flow or block the fallback behind it; and the built-in
+Cloudflare backend reads the same credentials the module already uses, so the
+facade adds no new secret. It does not add a new outbound target either — a
+backend chooses its own endpoint, exactly as a consumer's own code would.
+
 **The migrations directory is executed code.** `UPSUN_MIGRATIONS_DIR` files are
 `include`d and their returned callable is invoked during deploy. Keep the
 directory in version control and treat it like any other code path — the

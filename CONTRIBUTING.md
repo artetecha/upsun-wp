@@ -166,8 +166,8 @@ first: this is the one path where hostile input becomes committed, executed code
   a guarded per-file stub silently stops taking effect once the bootstrap grows
   one, which has already happened once.
 - **Integration** (`tests/integration/`): assertions that need real WordPress —
-  DB writes, hook registration under real core, deprecation notices, response
-  headers. Dependency-free helpers in `lib.php`; the scripts run through
+  DB writes, hook registration under real core, the response headers a browser
+  would see. Dependency-free helpers in `lib.php`; the scripts run through
   `wp eval-file`.
 - **Structural guards** are used where a convention matters more than any single
   case: `FilterApplicationTest` (each centralized filter applied exactly once) and
@@ -181,7 +181,7 @@ by stashing the fix.
 ## Changing the public API
 
 The surface is documented in [`docs/api-reference.md`](docs/api-reference.md) and
-frozen at 1.0. Before then:
+**frozen as of 1.0**, so:
 
 1. **Adding** a filter, an array key, a JSON field, or an optional flag is
    additive and fine.
@@ -210,6 +210,6 @@ frozen at 1.0. Before then:
   behaviour, [CHANGELOG.md](CHANGELOG.md) under the unreleased heading, and the
   generated reference if the API moved.
 
-Releases are tags on `main` (`0.x.y`, annotated, with a summary), picked up
-automatically by Packagist. The version lives in `UPSUN_MU_PLUGIN_VERSION` and
+Releases are annotated tags on `main` (`1.0.0`, `1.1.0`, …, with a summary),
+picked up automatically by Packagist. The version lives in `UPSUN_MU_PLUGIN_VERSION` and
 must be bumped in the same PR as the change it describes.
