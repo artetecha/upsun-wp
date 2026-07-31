@@ -94,6 +94,10 @@ function __( $text, $domain = null ) {
 	return $text;
 }
 
+function _n( $single, $plural, $number, $domain = null ) {
+	return 1 === (int) $number ? $single : $plural;
+}
+
 function esc_html__( $text, $domain = null ) {
 	return $text;
 }
@@ -286,6 +290,11 @@ function wp_remote_get( $url, $args = array() ) {
 	);
 }
 
+/** Same queue and request log as wp_remote_get; $args carries the body. */
+function wp_remote_post( $url, $args = array() ) {
+	return wp_remote_get( $url, $args );
+}
+
 function wp_remote_retrieve_response_code( $response ) {
 	return is_array( $response ) ? ( $response['code'] ?? 0 ) : 0;
 }
@@ -360,8 +369,8 @@ function wp_is_writable( $path ) {
 	return is_writable( (string) $path );
 }
 
-require_once dirname( __DIR__ ) . '/src/Deprecations.php';
 require_once dirname( __DIR__ ) . '/src/Environment.php';
+require_once dirname( __DIR__ ) . '/src/Purge.php';
 require_once dirname( __DIR__ ) . '/src/helpers.php';
 require_once dirname( __DIR__ ) . '/src/CacheCheck.php';
 require_once dirname( __DIR__ ) . '/src/Sanitizers.php';

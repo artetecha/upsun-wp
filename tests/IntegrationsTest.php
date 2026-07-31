@@ -69,7 +69,7 @@ final class IntegrationsTest extends TestCase {
 	}
 
 	public function test_webhook_pause_can_be_opted_out(): void {
-		add_filter( 'upsun_safe_previews_pause_webhooks', '__return_false' );
+		add_filter( 'upsun_woocommerce_pause_webhooks', '__return_false' );
 
 		$this->assertTrue( ( new WooCommerce() )->maybe_pause_webhook( true ) );
 	}
@@ -87,7 +87,7 @@ final class IntegrationsTest extends TestCase {
 	}
 
 	public function test_stripe_forcing_can_be_opted_out(): void {
-		add_filter( 'upsun_safe_previews_stripe_test_mode', '__return_false' );
+		add_filter( 'upsun_woocommerce_stripe_test_mode', '__return_false' );
 
 		$settings = ( new WooCommerceStripe() )->force_test_mode( array( 'testmode' => 'no' ) );
 

@@ -2,9 +2,9 @@
 
 # API reference
 
-The public surface of **upsun-wp 0.8.0**, generated from the source. Everything listed here is API: it does not change without a deprecation cycle (see [the policy](#deprecation-policy)). Anything in `src/` **not** listed here is `@internal` and may change in any release.
+The public surface of **upsun-wp 1.0.0**, generated from the source. Everything listed here is API: it does not change without a deprecation cycle (see [the policy](#deprecation-policy)). Anything in `src/` **not** listed here is `@internal` and may change in any release.
 
-45 filters · 1 action · 12 helper functions · 4 interfaces · 10 WP-CLI subcommands
+46 filters · 1 action · 12 helper functions · 4 interfaces · 10 WP-CLI subcommands
 
 ## Filters
 
@@ -38,6 +38,7 @@ The public surface of **upsun-wp 0.8.0**, generated from the source. Everything 
 | `upsun_page_cache_ttl` | `int` | 600 | Filters the shared-cache TTL in seconds. Zero or less disables the Cache-Control header entirely. |
 | `upsun_preview_noindex` | `bool` | true | Filters whether non-production environments send noindex. Disable for a real staging domain that should be indexable. |
 | `upsun_preview_sanitizers` | `array` | — | Filters the sanitizer registry. Consumers add their own DB-writing sanitizers (same idempotency and dry-run contract) or remove built-ins. |
+| `upsun_purge_backends` | `array<string, callable>` | — | Filters the shared-cache purge backends, in dispatch order: the first one to return true wins, returning false passes the request along, and a WP_Error stops the chain and is reported. A backend receives absolute URLs, or an empty array meaning "everything you can invalidate". A backend that throws is treated as a failed attempt — the exception is caught and reported, never propagated to the caller, and the next backend still gets its turn. |
 | `upsun_safe_previews_actions` | `array` | — | Filters the preview protection registry. Built-in Integrations and consumers add entries for specific plugins (gateways, CRMs) or remove existing ones. |
 | `upsun_safe_previews_boot_check` | `bool` | false | Filters whether the environment stamp is checked on every boot, as a fallback for projects without the post_deploy hook wiring. |
 | `upsun_safe_previews_mail` | `string` | — | Filters the preview mail policy. |
@@ -223,25 +224,7 @@ Pre-1.0, the newest minor carries fixes and breaking changes are documented per 
 
 ### Currently deprecated
 
-Still honoured, removed at 1.0. Each emits a notice through `_deprecated_hook()` when a callback is attached and `WP_DEBUG` is on.
-
-| Deprecated | Replacement |
-|---|---|
-| `upsun_cloudflare_enabled` | `upsun_module_enabled` |
-| `upsun_cron_heartbeat_enabled` | `upsun_module_enabled` |
-| `upsun_dashboard_enabled` | `upsun_module_enabled` |
-| `upsun_disk_usage_thresholds` | `upsun_mount_usage_thresholds` |
-| `upsun_environment_indicator_enabled` | `upsun_module_enabled` |
-| `upsun_login_banner` | `upsun_environment_indicator_login_banner` |
-| `upsun_mount_usage_enabled` | `upsun_module_enabled` |
-| `upsun_mu_modules` | `upsun_modules` |
-| `upsun_safe_previews_enabled` | `upsun_module_enabled` |
-| `upsun_safe_previews_pause_webhooks` | `upsun_woocommerce_pause_webhooks` |
-| `upsun_safe_previews_stripe_test_mode` | `upsun_woocommerce_stripe_test_mode` |
-| `upsun_sanitize_anonymize_passwords` | `upsun_sanitize_anonymize_user_passwords` |
-| `upsun_security_headers_enabled` | `upsun_module_enabled` |
-| `upsun_writable_path_requirements` | `upsun_writable_paths_requirements` |
-| `upsun_writable_paths_enabled` | `upsun_module_enabled` |
+Nothing. The pre-1.0 renames were removed at 1.0 and no symbol is deprecated in this release.
 
 ## Supported versions
 

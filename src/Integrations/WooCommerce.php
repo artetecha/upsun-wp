@@ -14,7 +14,6 @@
 
 namespace Upsun\Integrations;
 
-use Upsun\Deprecations;
 use Upsun\Integration;
 
 class WooCommerce implements Integration {
@@ -122,10 +121,6 @@ class WooCommerce implements Integration {
 		 *
 		 * @param bool $paused Default true.
 		 */
-		return (bool) Deprecations::filter(
-			'upsun_woocommerce_pause_webhooks',
-			'upsun_safe_previews_pause_webhooks',
-			true
-		);
+		return (bool) apply_filters( 'upsun_woocommerce_pause_webhooks', true );
 	}
 }

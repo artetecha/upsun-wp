@@ -56,6 +56,21 @@ cleanup() {
 		wait "${SERVER_PID}" 2>/dev/null || true
 	fi
 
+	# PHP_CLI_SERVER_WORKERS makes php -S fork children that share the
+	# listening socket, and they do not die with the parent — so killing only
+	# the tracked PID leaks workers that keep holding the port and break the
+	# next run. Match on our exact port so this can never touch an unrelated
+	# server.
+	if command -v pgrep >/dev/null; then
+		local stragglers
+		stragglers="$(pgrep -f "php -S 127.0.0.1:${PORT}" 2>/dev/null || true)"
+
+		if [[ -n "${stragglers}" ]]; then
+			# shellcheck disable=SC2086 -- deliberate word splitting on PIDs.
+			kill ${stragglers} 2>/dev/null || true
+		fi
+	fi
+
 	if [[ "${KEEP}" != "1" ]]; then
 		rm -rf "${WORK_DIR}"
 	else
@@ -240,19 +255,6 @@ export UPSUN_IT_DB_HOST="${DB_HOST}"
 say 'On-platform assertions'
 
 wpcli eval-file "${PLUGIN_DIR}/tests/integration/on-platform.php"
-
-say 'Deprecation notices (WP_DEBUG on)'
-
-# _deprecated_hook() only calls trigger_error() under WP_DEBUG, so the notices
-# get their own phase with it enabled — and switched back off afterwards, so the
-# HTTP phase below sees a production-like configuration.
-wpcli config set WP_DEBUG true --raw
-wpcli config set WP_DEBUG_DISPLAY false --raw
-wpcli eval-file "${PLUGIN_DIR}/tests/integration/deprecations.php" || {
-	wpcli config set WP_DEBUG false --raw
-	die 'the deprecation shims did not report through core'
-}
-wpcli config set WP_DEBUG false --raw
 
 say 'Kill switch on-platform'
 

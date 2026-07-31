@@ -34,7 +34,8 @@ final class SafePreviewsTest extends TestCase {
 	}
 
 	/**
-	 * Boot gating moved to ModuleRegistry in 0.7; see ModuleRegistryTest.
+	 * Boot gating lives in ModuleRegistry; the toggle this module used to read
+	 * was deprecated in 0.7 and removed in 1.0, so it now does nothing.
 	 */
 	public function test_should_load_is_unconditional(): void {
 		$this->assertTrue( ( new SafePreviews() )->should_load() );

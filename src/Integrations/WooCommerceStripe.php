@@ -8,7 +8,6 @@
 
 namespace Upsun\Integrations;
 
-use Upsun\Deprecations;
 use Upsun\Integration;
 
 class WooCommerceStripe implements Integration {
@@ -88,10 +87,6 @@ class WooCommerceStripe implements Integration {
 		 *
 		 * @param bool $forced Default true.
 		 */
-		return (bool) Deprecations::filter(
-			'upsun_woocommerce_stripe_test_mode',
-			'upsun_safe_previews_stripe_test_mode',
-			true
-		);
+		return (bool) apply_filters( 'upsun_woocommerce_stripe_test_mode', true );
 	}
 }

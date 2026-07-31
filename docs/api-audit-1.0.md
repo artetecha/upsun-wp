@@ -17,6 +17,9 @@ behind each verdict stays reviewable.
 | 7 renames, shimmed | 0.7.0 | §1a, §1e — **6, not 7, of the listed names** |
 | Generic `upsun_{module,integration,fetcher}_enabled` | 0.7.0 | §1b |
 | `upsun_cloudflare_restore_remote_addr` removed | 0.7.0 | §1d, unshimmed |
+| Security review + threat model, generated API reference | 0.8.0 | §4, §5, §6 |
+| **API frozen**, deprecation policy published, shims removed | 1.0.0 | The defining act this audit was written for |
+| `Upsun\purge_paths()` shipped, non-goals documented | 1.0.0 | §5 — the IN/OUT decision, resolved as IN |
 
 **Deviation 1 — `upsun_configure_smtp` was not renamed.** §1e recommended
 `upsun_smtp_enabled`, reading it as a boot gate with a verb name. It is not one:

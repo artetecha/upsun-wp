@@ -210,7 +210,7 @@ final class DashboardTest extends TestCase {
 		\Upsun\Environment::reset();
 
 		add_filter(
-			'upsun_mu_modules',
+			'upsun_modules',
 			function () {
 				return array( 'test' => UpsunTestModule::class );
 			}

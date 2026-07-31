@@ -47,7 +47,7 @@ final class LoginBannerTest extends TestCase {
 	}
 
 	public function test_filter_disables_the_banner(): void {
-		add_filter( 'upsun_login_banner', '__return_false' );
+		add_filter( 'upsun_environment_indicator_login_banner', '__return_false' );
 
 		$this->assertSame( '<p>existing</p>', ( new EnvironmentIndicator() )->login_banner( '<p>existing</p>' ) );
 	}

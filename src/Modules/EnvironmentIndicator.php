@@ -7,7 +7,6 @@
 
 namespace Upsun\Modules;
 
-use Upsun\Deprecations;
 use Upsun\Environment;
 use Upsun\Module;
 
@@ -56,7 +55,7 @@ class EnvironmentIndicator implements Module {
 		 *
 		 * @param bool $enabled Default true.
 		 */
-		if ( ! (bool) Deprecations::filter( 'upsun_environment_indicator_login_banner', 'upsun_login_banner', true ) ) {
+		if ( ! (bool) apply_filters( 'upsun_environment_indicator_login_banner', true ) ) {
 			return $message;
 		}
 

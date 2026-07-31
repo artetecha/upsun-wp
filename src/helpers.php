@@ -66,4 +66,24 @@ if ( ! function_exists( __NAMESPACE__ . '\\is_upsun' ) ) {
 	function version(): string {
 		return defined( 'UPSUN_MU_PLUGIN_VERSION' ) ? UPSUN_MU_PLUGIN_VERSION : '0.0.0-dev';
 	}
+
+	/**
+	 * Purge paths from whatever shared cache fronts this site.
+	 *
+	 * Consumer code should not have to know which cache is in front of it: a
+	 * theme that just published a page wants "purge these paths". Dispatches to
+	 * the first available backend — the `cloudflare` module registers one when
+	 * it is configured, and `upsun_purge_backends` takes others.
+	 *
+	 * The Upsun router cache itself has no purge API, so with nothing fronting
+	 * the site this reports that plainly instead of pretending to have worked.
+	 * Check `purged`; `message` is safe to surface to an operator.
+	 *
+	 * @param string[] $paths Paths ('/about/') or absolute URLs. Empty means
+	 *                        everything the backend can invalidate.
+	 * @return array{purged: bool, backend: ?string, urls: string[], message: string}
+	 */
+	function purge_paths( array $paths = array() ): array {
+		return Purge::run( $paths );
+	}
 }

@@ -194,20 +194,31 @@ $again = Upsun\Sanitizers::run( false );
 
 it_contains( 'a second run anonymizes nothing', 'anonymized 0', implode( ' | ', $again ) );
 
-it_section( 'Deprecation shims against real WordPress' );
+it_section( 'purge_paths() against real WordPress' );
 
-// The reason the harness had to land before the renames: the shims call
-// apply_filters_deprecated(), which is core and absent from the unit stubs.
-// Here it is the real function. The notice itself needs WP_DEBUG, so it is
-// asserted in deprecations.php; this covers the values.
-it_ok( 'apply_filters_deprecated() is the real core function', function_exists( 'apply_filters_deprecated' ) );
+// New public API in 1.0. Nothing fronts this install, so the contract being
+// checked is the honest one: it reports that rather than claiming success.
+$purge = Upsun\purge_paths( array( '/about/' ) );
 
+it_same( 'nothing was purged', false, $purge['purged'] );
+it_same( 'and no backend claimed it', null, $purge['backend'] );
+it_contains( 'the message explains the platform', 'no purge API', $purge['message'] );
+
+// The cloudflare module is loaded here, so its backend is registered — it
+// declines for want of credentials rather than failing.
+it_ok( 'the cloudflare module registered a purge backend', array_key_exists( 'cloudflare', Upsun\Purge::backends() ) );
+
+it_section( 'Renamed filters: canonical names only (1.0)' );
+
+// The shims were removed at 1.0. Under real WordPress the canonical name must
+// decide, and a callback on the name it replaced must have no effect at all —
+// the assertion the removal is worth having.
 add_filter( 'upsun_mount_usage_thresholds', static fn () => array( 1, 2 ) );
-it_same( 'the canonical name is honoured', 'fail', Upsun\Modules\MountUsage::verdict( 100, 50 ) );
+it_same( 'the canonical name decides', 'fail', Upsun\Modules\MountUsage::verdict( 100, 50 ) );
 remove_all_filters( 'upsun_mount_usage_thresholds' );
 
 add_filter( 'upsun_disk_usage_thresholds', static fn () => array( 1, 2 ) );
-it_same( 'the deprecated name still decides', 'fail', Upsun\Modules\MountUsage::verdict( 100, 50 ) );
+it_same( 'the removed name is inert', 'pass', Upsun\Modules\MountUsage::verdict( 100, 50 ) );
 remove_all_filters( 'upsun_disk_usage_thresholds' );
 
 // The generic toggle, through a real registry boot.

@@ -181,15 +181,19 @@ foreach ( $files as $path => $source ) {
 	}
 }
 
-// The generic per-registry toggles are applied with a literal name but their
-// deprecated predecessors live in ModuleRegistry::TOGGLES.
-if ( preg_match_all( "/'([a-z-]+)'\s*=>\s*'(upsun_[a-z_]+_enabled)'/", $files['src/ModuleRegistry.php'], $matches, PREG_SET_ORDER ) ) {
+// Deprecated names, when there are any: the per-registry toggle predecessors in
+// ModuleRegistry::TOGGLES and the rename map in Deprecations::RENAMED. Both are
+// optional — 1.0 removed the shim layer, and a release with nothing deprecated
+// simply omits the table.
+if ( isset( $files['src/ModuleRegistry.php'] )
+	&& preg_match_all( "/'([a-z-]+)'\s*=>\s*'(upsun_[a-z_]+_enabled)'/", $files['src/ModuleRegistry.php'], $matches, PREG_SET_ORDER ) ) {
 	foreach ( $matches as $match ) {
 		$deprecated[ $match[2] ] = 'upsun_module_enabled';
 	}
 }
 
-if ( preg_match_all( "/'([a-z0-9_]+)'\s*=>\s*'(upsun_[a-z0-9_]+)',/", $files['src/Deprecations.php'], $matches, PREG_SET_ORDER ) ) {
+if ( isset( $files['src/Deprecations.php'] )
+	&& preg_match_all( "/'([a-z0-9_]+)'\s*=>\s*'(upsun_[a-z0-9_]+)',/", $files['src/Deprecations.php'], $matches, PREG_SET_ORDER ) ) {
 	foreach ( $matches as $match ) {
 		$deprecated[ $match[1] ] = $match[2];
 	}
@@ -433,7 +437,12 @@ $out[] = '- **additive and therefore not breaking:** new filters, new keys in a 
 $out[] = '- **breaking, therefore major-only:** removing or renaming a listed symbol, changing a filter\'s parameter order or types, changing a default in a way that changes behaviour, removing a JSON key, raising the PHP or WordPress floor.';
 $out[] = '';
 
-if ( array() !== $deprecated ) {
+if ( array() === $deprecated ) {
+	$out[] = '### Currently deprecated';
+	$out[] = '';
+	$out[] = 'Nothing. The pre-1.0 renames were removed at 1.0 and no symbol is deprecated in this release.';
+	$out[] = '';
+} else {
 	$out[] = '### Currently deprecated';
 	$out[] = '';
 	$out[] = 'Still honoured, removed at 1.0. Each emits a notice through `_deprecated_hook()` when a callback is attached and `WP_DEBUG` is on.';
