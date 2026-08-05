@@ -2,7 +2,7 @@
 
 # API reference
 
-The public surface of **upsun-wp 1.0.0**, generated from the source. Everything listed here is API: it does not change without a deprecation cycle (see [the policy](#deprecation-policy)). Anything in `src/` **not** listed here is `@internal` and may change in any release.
+The public surface of **upsun-wp 1.0.1**, generated from the source. Everything listed here is API: it does not change without a deprecation cycle (see [the policy](#deprecation-policy)). Anything in `src/` **not** listed here is `@internal` and may change in any release.
 
 46 filters · 1 action · 12 helper functions · 4 interfaces · 10 WP-CLI subcommands
 

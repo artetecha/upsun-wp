@@ -1005,7 +1005,10 @@ final class Vendor {
 	/**
 	 * Extract a zip and return the directory to vendor from — the single
 	 * top-level directory the archive wraps its files in, if any, else the
-	 * extraction root. Null on failure.
+	 * extraction root. macOS sidecar entries are dropped on the way in, so
+	 * they neither ship in the package nor mask the wrapping directory.
+	 * Null on failure, on an unsafe archive, or on an archive holding
+	 * nothing but sidecars.
 	 *
 	 * @internal
 	 */
@@ -1025,8 +1028,10 @@ final class Vendor {
 		// but the archive is external input, so validate explicitly rather
 		// than rely on version-dependent behavior. The same pass totals the
 		// declared uncompressed size, so a bomb is refused before it is
-		// written rather than after it has filled the mount.
+		// written rather than after it has filled the mount, and collects the
+		// entries actually worth extracting (see is_macos_metadata()).
 		$uncompressed = 0;
+		$wanted       = array();
 
 		for ( $i = 0; $i < $archive->numFiles; $i++ ) {
 			$entry = $archive->getNameIndex( $i );
@@ -1052,12 +1057,32 @@ final class Vendor {
 				$archive->close();
 				return null;
 			}
+
+			// Note the cap above totals every declared entry, including the
+			// sidecars this skips: a bomb hidden in a sidecar tree is still
+			// an archive to refuse, even though it would not be extracted.
+			if ( ! self::is_macos_metadata( $normalized ) ) {
+				$wanted[] = $entry;
+			}
+		}
+
+		// Nothing but sidecars (or an empty archive) is not a package.
+		if ( array() === $wanted ) {
+			$archive->close();
+			return null;
 		}
 
 		self::ensure_dir( $dest );
 
-		$archive->extractTo( $dest );
+		// Extract the filtered list rather than the whole archive, so the
+		// sidecars never reach disk and cannot be copied into the vendored
+		// package by copy_tree() further up.
+		$extracted = $archive->extractTo( $dest, $wanted );
 		$archive->close();
+
+		if ( true !== $extracted ) {
+			return null;
+		}
 
 		$entries = array_values( array_diff( scandir( $dest ) ?: array(), array( '.', '..' ) ) );
 
@@ -1067,6 +1092,42 @@ final class Vendor {
 		}
 
 		return $dest;
+	}
+
+	/**
+	 * Is this zip entry macOS packaging debris rather than package content?
+	 *
+	 * Zipping a directory on macOS adds an AppleDouble sidecar tree — a
+	 * `__MACOSX/` mirror of the payload whose files are named `._<original>`
+	 * — and Finder leaves `.DS_Store` behind. None of it is part of the
+	 * plugin or theme, and none of it is load-bearing: WordPress never
+	 * reads these, and a resource fork for a PHP file is not PHP.
+	 *
+	 * Filtering them matters for more than tidiness. extract_zip() decides
+	 * the package root by looking for a *single* top-level directory, so an
+	 * archive holding `plugin-name/` plus `__MACOSX/` presents two entries,
+	 * fails that test, and vendors the extraction root instead — burying the
+	 * plugin header one level below the package root, where WordPress cannot
+	 * see the plugin at all. fluentcampaign-pro 3.1.11 shipped exactly that
+	 * way; 3.1.10 had not. Whether a vendor zips on a Mac is not something
+	 * we control or can predict, so treat the sidecars as always-possible
+	 * input instead of trusting the archive's shape.
+	 *
+	 * Matched per path segment, so a sidecar tree nested at any depth is
+	 * caught, not just one at the archive root.
+	 *
+	 * @internal
+	 */
+	private static function is_macos_metadata( string $normalized ): bool {
+		foreach ( explode( '/', $normalized ) as $segment ) {
+			if ( '__MACOSX' === $segment
+				|| '.DS_Store' === $segment
+				|| ( '' !== $segment && 0 === strncmp( $segment, '._', 2 ) ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
