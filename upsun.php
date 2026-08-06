@@ -15,7 +15,7 @@ if ( defined( 'UPSUN_MU_PLUGIN_DIR' ) ) {
 }
 
 define( 'UPSUN_MU_PLUGIN_DIR', __DIR__ );
-define( 'UPSUN_MU_PLUGIN_VERSION', '1.0.0' );
+define( 'UPSUN_MU_PLUGIN_VERSION', '1.0.1' );
 
 require_once __DIR__ . '/src/Environment.php';
 require_once __DIR__ . '/src/Purge.php';

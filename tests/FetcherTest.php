@@ -207,6 +207,74 @@ final class FetcherTest extends TestCase {
 		$this->assertFileExists( $root . '/a.php' );
 	}
 
+	/**
+	 * Regression: fluentcampaign-pro 3.1.11 was zipped on a Mac, so the
+	 * archive carried an AppleDouble sidecar tree beside the plugin
+	 * directory. That second top-level entry defeated the single-wrapping-
+	 * directory test, the extraction root got vendored instead, and the
+	 * plugin header ended up one level too deep — invisible to WordPress.
+	 */
+	public function test_extract_unwraps_despite_a_macos_sidecar_tree(): void {
+		$zip = $this->dir . '/mac.zip';
+		$this->make_zip( $zip, array(
+			'fluentcampaign-pro/fluentcampaign-pro.php' => "<?php\n/* Plugin Name: X */",
+			'fluentcampaign-pro/app/Core/App.php'       => '<?php',
+			'__MACOSX/._fluentcampaign-pro'             => 'AppleDouble',
+			'__MACOSX/fluentcampaign-pro/._app'         => 'AppleDouble',
+		) );
+
+		$root = Vendor::extract_zip( $zip, $this->dir . '/mac' );
+
+		$this->assertNotNull( $root );
+		$this->assertSame( 'fluentcampaign-pro', basename( $root ) );
+		$this->assertFileExists( $root . '/fluentcampaign-pro.php' );
+		$this->assertFileExists( $root . '/app/Core/App.php' );
+		$this->assertDirectoryDoesNotExist( $this->dir . '/mac/__MACOSX' );
+	}
+
+	public function test_extract_drops_sidecars_from_a_flat_zip(): void {
+		$zip = $this->dir . '/flat-mac.zip';
+		$this->make_zip( $zip, array(
+			'a.php'     => '<?php',
+			'._a.php'   => 'AppleDouble',
+			'.DS_Store' => 'Finder',
+		) );
+
+		$root = Vendor::extract_zip( $zip, $this->dir . '/flat-mac' );
+
+		$this->assertSame( realpath( $this->dir . '/flat-mac' ), realpath( $root ) );
+		$this->assertFileExists( $root . '/a.php' );
+		$this->assertFileDoesNotExist( $root . '/._a.php' );
+		$this->assertFileDoesNotExist( $root . '/.DS_Store' );
+	}
+
+	public function test_extract_drops_sidecars_nested_inside_the_wrapper(): void {
+		$zip = $this->dir . '/nested-mac.zip';
+		$this->make_zip( $zip, array(
+			'my-plugin/my-plugin.php'      => '<?php',
+			'my-plugin/assets/style.css'   => '/* css */',
+			'my-plugin/assets/._style.css' => 'AppleDouble',
+			'my-plugin/assets/.DS_Store'   => 'Finder',
+		) );
+
+		$root = Vendor::extract_zip( $zip, $this->dir . '/nested-mac' );
+
+		$this->assertSame( 'my-plugin', basename( (string) $root ) );
+		$this->assertFileExists( $root . '/assets/style.css' );
+		$this->assertFileDoesNotExist( $root . '/assets/._style.css' );
+		$this->assertFileDoesNotExist( $root . '/assets/.DS_Store' );
+	}
+
+	public function test_extract_rejects_an_archive_of_only_sidecars(): void {
+		$zip = $this->dir . '/only-mac.zip';
+		$this->make_zip( $zip, array(
+			'__MACOSX/._thing' => 'AppleDouble',
+			'.DS_Store'        => 'Finder',
+		) );
+
+		$this->assertNull( Vendor::extract_zip( $zip, $this->dir . '/only-mac' ) );
+	}
+
 	/* End-to-end update(). */
 
 	public function test_update_downloads_extracts_and_re_vendors(): void {

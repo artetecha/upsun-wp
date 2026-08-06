@@ -9,6 +9,21 @@ Pre-1.0, breaking changes may land in a minor — they are called out under
 least one release. From 1.0 the [deprecation
 policy](docs/api-reference.md#deprecation-policy) applies.
 
+## 1.0.1 — 2026-08-05
+
+- **Vendoring: tolerate archives zipped on macOS.** `wp upsun vendor` now drops
+  AppleDouble sidecars (`__MACOSX/`, `._*`) and `.DS_Store` on the way in, so
+  they neither ship in the vendored package nor mask the package root. A zip
+  holding `plugin-name/` beside `__MACOSX/` presented two top-level entries,
+  failed the single-wrapping-directory test, and was vendored from the
+  extraction root — burying the plugin header one level too deep, where
+  WordPress cannot see the plugin, and hiding the upstream `composer.json` so
+  the regenerated one lost its `extra` keys. fluentcampaign-pro 3.1.11 shipped
+  this way where 3.1.10 had not, which is how it surfaced; whether an upstream
+  vendor zips on a Mac is not something we control, so the sidecars are now
+  treated as always-possible input. An archive of nothing but sidecars is
+  refused rather than vendored as an empty package.
+
 ## 1.0.0 — 2026-07-31
 
 **The public API is frozen.** Filters, constants, the action, the helper
