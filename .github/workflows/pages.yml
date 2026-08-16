@@ -6,6 +6,10 @@ on:
     paths:
       - 'site/**'
       - '.github/workflows/pages.yml'
+    # Releases redeploy too: the version badge is stamped from the latest
+    # tag below, and a release rarely touches site/** (1.0.1 didn't), so
+    # without this trigger the deployed badge goes stale on every release.
+    tags: ['[0-9]*']
   workflow_dispatch:
 
 permissions:
@@ -25,6 +29,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Tags are needed to stamp the version badge.
+          fetch-depth: 0
+
+      - name: Stamp the version badge from the latest tag
+        # The badge in the HTML is only a fallback for local viewing; the
+        # deployed page always shows the latest release, so tagging can
+        # never leave the site stale again.
+        run: |
+          version="$(git describe --tags --abbrev=0)"
+          sed -i "s|\(class="badge badge-version">\)v[^<]*|\1v${version}|" site/index.html
+          grep -o 'class="badge badge-version">v[^<]*' site/index.html
 
       - uses: actions/configure-pages@v5
 
