@@ -30,11 +30,30 @@ class WooCommerceStripe implements Integration {
 	private const VERDICT_TTL = 43200; // 12 hours.
 
 	/**
-	 * How long a failed probe (network error) is cached, in seconds — long
-	 * enough that dashboard reloads do not hammer an unreachable host,
-	 * short enough that the verdict recovers with connectivity.
+	 * How long an inconclusive probe (network error, rate limit, Stripe
+	 * outage) is cached, in seconds — long enough that dashboard reloads do
+	 * not hammer a struggling host, short enough that the verdict recovers
+	 * with connectivity.
 	 */
 	private const RETRY_TTL = 300; // 5 minutes.
+
+	/**
+	 * Per-probe HTTP timeout, in seconds. Probes run synchronously during
+	 * the dashboard render, so with two keys the worst case is one
+	 * 2 × TIMEOUT stall per cache window — bounded, but worth keeping short.
+	 */
+	private const TIMEOUT = 3;
+
+	/*
+	 * Verdict tokens. One name per state, shared by key_verdict(), the
+	 * label map, and the broken-state check, so a rename cannot silently
+	 * desynchronize them.
+	 */
+	private const VALID                = 'valid';
+	private const INVALID              = 'invalid';
+	private const MISSING              = 'missing';
+	private const UNVERIFIED_DISABLED  = 'unverified-disabled';
+	private const UNVERIFIED_NO_ANSWER = 'unverified-no-answer';
 
 	public function label(): string {
 		return 'WooCommerce Stripe';
@@ -164,11 +183,11 @@ class WooCommerceStripe implements Integration {
 		);
 
 		$labels = array(
-			'missing'             => __( 'missing', 'upsun-mu-plugin' ),
-			'valid'               => __( 'valid', 'upsun-mu-plugin' ),
-			'invalid'             => __( 'INVALID — rejected by Stripe', 'upsun-mu-plugin' ),
-			'unverified-disabled' => __( 'unverified (probing disabled)', 'upsun-mu-plugin' ),
-			'unverified-network'  => __( 'unverified (Stripe unreachable)', 'upsun-mu-plugin' ),
+			self::MISSING              => __( 'missing', 'upsun-mu-plugin' ),
+			self::VALID                => __( 'valid', 'upsun-mu-plugin' ),
+			self::INVALID              => __( 'INVALID — rejected by Stripe', 'upsun-mu-plugin' ),
+			self::UNVERIFIED_DISABLED  => __( 'unverified (probing disabled)', 'upsun-mu-plugin' ),
+			self::UNVERIFIED_NO_ANSWER => __( 'unverified (no conclusive answer from Stripe)', 'upsun-mu-plugin' ),
 		);
 
 		$broken = false;
@@ -176,8 +195,8 @@ class WooCommerceStripe implements Integration {
 		echo '<table class="widefat striped"><tbody>';
 
 		foreach ( $keys as $label => list( $key, $type ) ) {
-			$verdict = '' === $key ? 'missing' : $this->key_verdict( $key, $type );
-			$broken  = $broken || in_array( $verdict, array( 'missing', 'invalid' ), true );
+			$verdict = '' === $key ? self::MISSING : $this->key_verdict( $key, $type );
+			$broken  = $broken || in_array( $verdict, array( self::MISSING, self::INVALID ), true );
 
 			printf(
 				'<tr><td>%s</td><td><strong>%s</strong></td></tr>',
@@ -204,11 +223,14 @@ class WooCommerceStripe implements Integration {
 	 * tokens request carrying the key and nothing else. Stripe rejects a
 	 * dead key with 401; a live key answers 400 (no card supplied), which
 	 * is proof enough. A secret key is read-only probed via /v1/account.
-	 * Only 401 means invalid; any other answer from Stripe means the key
-	 * was accepted, and a transport failure is reported as unverified
-	 * rather than guessed at.
+	 * Only 401 means invalid, and only the probe's expected happy answers
+	 * mean valid; a transport failure, a rate limit, or a Stripe outage is
+	 * reported as unverified rather than guessed at. Probes run
+	 * synchronously in the dashboard render: the worst case is a
+	 * 2 × TIMEOUT stall on the first render per cache window, and the
+	 * upsun_woocommerce_stripe_validate_keys filter removes even that.
 	 *
-	 * @return string 'valid' | 'invalid' | 'unverified-disabled' | 'unverified-network'.
+	 * @return string One of the verdict constants.
 	 */
 	private function key_verdict( string $key, string $type ): string {
 		/**
@@ -220,10 +242,13 @@ class WooCommerceStripe implements Integration {
 		 * @param bool $validate Default true.
 		 */
 		if ( ! apply_filters( 'upsun_woocommerce_stripe_validate_keys', true ) ) {
-			return 'unverified-disabled';
+			return self::UNVERIFIED_DISABLED;
 		}
 
-		$cache_key = 'upsun_stripe_key_' . md5( $key );
+		// The probe type is part of the cache key: the same string configured
+		// in both fields must yield two independent probes, not one verdict
+		// read back for the other key's endpoint.
+		$cache_key = 'upsun_stripe_key_' . md5( $type . '|' . $key );
 		$cached    = get_site_transient( $cache_key );
 
 		if ( is_string( $cached ) && '' !== $cached ) {
@@ -234,7 +259,7 @@ class WooCommerceStripe implements Integration {
 			$response = wp_remote_get(
 				'https://api.stripe.com/v1/account',
 				array(
-					'timeout' => 5,
+					'timeout' => self::TIMEOUT,
 					'headers' => array( 'Authorization' => 'Bearer ' . $key ),
 				)
 			);
@@ -242,21 +267,37 @@ class WooCommerceStripe implements Integration {
 			$response = wp_remote_post(
 				'https://api.stripe.com/v1/tokens',
 				array(
-					'timeout' => 5,
+					'timeout' => self::TIMEOUT,
 					'body'    => array( 'key' => $key ),
 				)
 			);
 		}
 
 		if ( is_wp_error( $response ) ) {
-			set_site_transient( $cache_key, 'unverified-network', self::RETRY_TTL );
+			set_site_transient( $cache_key, self::UNVERIFIED_NO_ANSWER, self::RETRY_TTL );
 
-			return 'unverified-network';
+			return self::UNVERIFIED_NO_ANSWER;
 		}
 
-		$verdict = 401 === (int) wp_remote_retrieve_response_code( $response )
-			? 'invalid'
-			: 'valid';
+		// Only the answers this probe can interpret are conclusive: 401 is
+		// Stripe rejecting the key; the expected happy answers are 200 for
+		// /v1/account and 200/400/402 for the card-less tokens request
+		// (400 = key accepted, card missing). Anything else — a 429, a 5xx,
+		// an intercepting proxy — proves nothing about the key and is cached
+		// briefly as unverified rather than guessed either way.
+		$code     = (int) wp_remote_retrieve_response_code( $response );
+		$accepted = 'secret' === $type ? array( 200 ) : array( 200, 400, 402 );
+
+		if ( 401 === $code ) {
+			$verdict = self::INVALID;
+		} elseif ( in_array( $code, $accepted, true ) ) {
+			$verdict = self::VALID;
+		} else {
+			set_site_transient( $cache_key, self::UNVERIFIED_NO_ANSWER, self::RETRY_TTL );
+
+			return self::UNVERIFIED_NO_ANSWER;
+		}
+
 		set_site_transient( $cache_key, $verdict, self::VERDICT_TTL );
 
 		return $verdict;

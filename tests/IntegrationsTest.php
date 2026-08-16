@@ -279,7 +279,42 @@ final class IntegrationsTest extends TestCase {
 
 		$html = $this->render_keys_panel();
 
-		$this->assertStringContainsString( 'unverified (Stripe unreachable)', $html );
+		$this->assertStringContainsString( 'unverified (no conclusive answer from Stripe)', $html );
 		$this->assertStringNotContainsString( 'INVALID', $html );
+	}
+
+	public function test_stripe_keys_rate_limits_and_outages_are_not_verdicts(): void {
+		$this->fake_wc_stripe();
+		$this->seed_test_mode_settings( 'pk_test_429', 'sk_test_429' );
+		// A 429 (or any 5xx) proves nothing about the key: it must NOT be
+		// cached as valid for 12 hours, which is what a naive
+		// "anything-but-401 means accepted" mapping would do.
+		upsun_test_http_reset( array( array( 'code' => 429 ), array( 'code' => 503 ) ) );
+
+		$html = $this->render_keys_panel();
+
+		$this->assertStringContainsString( 'unverified (no conclusive answer from Stripe)', $html );
+		$this->assertStringNotContainsString( '>valid<', $html );
+		$this->assertStringNotContainsString( 'INVALID', $html );
+	}
+
+	public function test_stripe_keys_same_string_in_both_fields_probes_both_endpoints(): void {
+		$this->fake_wc_stripe();
+		// Deliberately misconfigured: the same string in both key fields.
+		// Each field must still get its own probe against its own endpoint —
+		// a type-blind cache would decide the secret key's verdict from the
+		// publishable-key probe and skip /v1/account entirely.
+		$this->seed_test_mode_settings( 'sk_test_same', 'sk_test_same' );
+		upsun_test_http_reset( array( array( 'code' => 400 ), array( 'code' => 401 ) ) );
+
+		$html = $this->render_keys_panel();
+
+		$requests = $GLOBALS['upsun_test_http']['requests'];
+		$this->assertCount( 2, $requests );
+		$this->assertSame( 'https://api.stripe.com/v1/tokens', $requests[0]['url'] );
+		$this->assertSame( 'https://api.stripe.com/v1/account', $requests[1]['url'] );
+		// And the verdicts stay independent: publishable valid, secret invalid.
+		$this->assertStringContainsString( '>valid<', $html );
+		$this->assertStringContainsString( 'INVALID', $html );
 	}
 }
