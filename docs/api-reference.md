@@ -2,9 +2,9 @@
 
 # API reference
 
-The public surface of **upsun-wp 1.0.1**, generated from the source. Everything listed here is API: it does not change without a deprecation cycle (see [the policy](#deprecation-policy)). Anything in `src/` **not** listed here is `@internal` and may change in any release.
+The public surface of **upsun-wp 1.1.0**, generated from the source. Everything listed here is API: it does not change without a deprecation cycle (see [the policy](#deprecation-policy)). Anything in `src/` **not** listed here is `@internal` and may change in any release.
 
-46 filters · 1 action · 12 helper functions · 4 interfaces · 10 WP-CLI subcommands
+47 filters · 1 action · 12 helper functions · 4 interfaces · 10 WP-CLI subcommands
 
 ## Filters
 
@@ -55,6 +55,7 @@ The public surface of **upsun-wp 1.0.1**, generated from the source. Everything 
 | `upsun_vendor_fetchers` | `Fetcher[]` | — | Filters the vendored-update fetcher list. Register vendor-specific fetchers (e.g. a ThimPress fetcher gated on thim-core); the first whose supports() matches wins. The built-in transient fetcher is always tried last. |
 | `upsun_woocommerce_pause_webhooks` | `bool` | true | Filters whether WooCommerce webhook deliveries are paused on previews. |
 | `upsun_woocommerce_stripe_test_mode` | `bool` | true | Filters whether WooCommerce Stripe is forced into test mode on previews. |
+| `upsun_woocommerce_stripe_validate_keys` | `bool` | true | Filters whether the dashboard probes Stripe to verify the configured test keys. Disable on environments whose network policy forbids outbound calls from admin page loads; the panel then reports the keys as unverified instead of probing. |
 | `upsun_writable_paths_requirements` | `array` | — | Filters the writable-path requirements registry. |
 
 ## Actions

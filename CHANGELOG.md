@@ -9,6 +9,28 @@ Pre-1.0, breaking changes may land in a minor — they are called out under
 least one release. From 1.0 the [deprecation
 policy](docs/api-reference.md#deprecation-policy) applies.
 
+## 1.1.0 — 2026-08-16
+
+### Added
+
+- **"Stripe keys" dashboard panel** (WooCommerce Stripe integration): probes
+  the test keys the gateway is using against Stripe's API and reports the
+  verdict per key — valid, INVALID, missing, or unverified. This closes a gap
+  in the integration's own safety story: it forces the gateway into test mode
+  on preview clones, and missing test keys fail safe, but keys that are
+  present and *rejected* by Stripe leave the gateway available and silently
+  broken — card fields error at payment time and the express-checkout element
+  401s on every cart page load, none of it visible from the WordPress admin.
+  Live mode is reported but never probed: a production gateway proves its
+  keys by taking payments, and the panel has no business calling Stripe with
+  live credentials. Probes are the same requests stripe.js makes (a card-less
+  tokens request for the publishable key; read-only `/v1/account` for the
+  secret), verdicts are cached for 12 hours keyed on the key value, and a
+  transport failure reports "unverified" rather than guessing.
+- `upsun_woocommerce_stripe_validate_keys` filter — disable the probing on
+  environments whose network policy forbids outbound calls from admin page
+  loads; the panel then reports keys as unverified.
+
 ## 1.0.1 — 2026-08-05
 
 - **Vendoring: tolerate archives zipped on macOS.** `wp upsun vendor` now drops

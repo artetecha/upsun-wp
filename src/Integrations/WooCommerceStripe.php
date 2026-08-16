@@ -4,6 +4,16 @@
  * clones so the live keys copied from production can never charge anyone.
  * Runtime-only — the settings option in the cloned database is untouched,
  * and missing test keys simply make the gateway unavailable (fails safe).
+ *
+ * Forcing test mode creates an obligation this integration also carries:
+ * saying so when the test keys it switched the site onto do not work.
+ * Missing keys fail safe, but keys that are present and REJECTED by Stripe
+ * leave the gateway available and broken — card fields error at payment
+ * time and the express-checkout element 401s on every cart page load. That
+ * state is invisible from the WordPress admin (the gateway settings screen
+ * renders happily), so the dashboard panel below probes the configured test
+ * keys against Stripe's API and reports the verdict where an operator will
+ * see it.
  */
 
 namespace Upsun\Integrations;
@@ -11,6 +21,20 @@ namespace Upsun\Integrations;
 use Upsun\Integration;
 
 class WooCommerceStripe implements Integration {
+
+	/**
+	 * How long a definite verdict (valid / invalid) is cached, in seconds.
+	 * Keys change rarely, and the cache is keyed on the key value itself,
+	 * so replacing a key re-probes immediately.
+	 */
+	private const VERDICT_TTL = 43200; // 12 hours.
+
+	/**
+	 * How long a failed probe (network error) is cached, in seconds — long
+	 * enough that dashboard reloads do not hammer an unreachable host,
+	 * short enough that the verdict recovers with connectivity.
+	 */
+	private const RETRY_TTL = 300; // 5 minutes.
 
 	public function label(): string {
 		return 'WooCommerce Stripe';
@@ -22,6 +46,7 @@ class WooCommerceStripe implements Integration {
 
 	public function register(): void {
 		add_filter( 'upsun_safe_previews_actions', array( $this, 'add_protection' ), 5 );
+		add_filter( 'upsun_dashboard_panels', array( $this, 'add_keys_panel' ) );
 	}
 
 	public function add_protection( array $protections ): array {
@@ -88,5 +113,152 @@ class WooCommerceStripe implements Integration {
 		 * @param bool $forced Default true.
 		 */
 		return (bool) apply_filters( 'upsun_woocommerce_stripe_test_mode', true );
+	}
+
+	/* ---------------------------------------------------------------------
+	 * Dashboard: do the test keys actually work?
+	 * ------------------------------------------------------------------ */
+
+	public function add_keys_panel( array $panels ): array {
+		$panels['stripe-keys'] = array(
+			'title'   => __( 'Stripe keys', 'upsun-mu-plugin' ),
+			'render'  => array( $this, 'render_keys_panel' ),
+			'context' => 'side',
+		);
+
+		return $panels;
+	}
+
+	/**
+	 * Report whether the keys the gateway is currently using are usable.
+	 *
+	 * Reads the settings through get_option() so the effective mode is the
+	 * one force_test_mode() produced, not whatever the cloned database says.
+	 * Live mode is reported but never probed — a production gateway proves
+	 * its keys by taking payments, and this panel has no business calling
+	 * Stripe with live credentials. Test mode probes both keys, cached.
+	 */
+	public function render_keys_panel(): void {
+		if ( ! $this->is_active() ) {
+			echo '<p>' . esc_html__( 'WooCommerce Stripe not detected.', 'upsun-mu-plugin' ) . '</p>';
+			return;
+		}
+
+		$settings = get_option( 'woocommerce_stripe_settings' );
+
+		if ( ! is_array( $settings ) ) {
+			echo '<p>' . esc_html__( 'Gateway not configured.', 'upsun-mu-plugin' ) . '</p>';
+			return;
+		}
+
+		if ( 'yes' !== ( $settings['testmode'] ?? 'no' ) ) {
+			echo '<p>' . esc_html__( 'Live mode — keys are not probed from the dashboard; a live gateway proves itself by taking payments.', 'upsun-mu-plugin' ) . '</p>';
+			return;
+		}
+
+		echo '<p>' . esc_html__( 'Test mode is in effect; the gateway is using the test keys below.', 'upsun-mu-plugin' ) . '</p>';
+
+		$keys = array(
+			__( 'Publishable key', 'upsun-mu-plugin' ) => array( trim( (string) ( $settings['test_publishable_key'] ?? '' ) ), 'publishable' ),
+			__( 'Secret key', 'upsun-mu-plugin' )      => array( trim( (string) ( $settings['test_secret_key'] ?? '' ) ), 'secret' ),
+		);
+
+		$labels = array(
+			'missing'             => __( 'missing', 'upsun-mu-plugin' ),
+			'valid'               => __( 'valid', 'upsun-mu-plugin' ),
+			'invalid'             => __( 'INVALID — rejected by Stripe', 'upsun-mu-plugin' ),
+			'unverified-disabled' => __( 'unverified (probing disabled)', 'upsun-mu-plugin' ),
+			'unverified-network'  => __( 'unverified (Stripe unreachable)', 'upsun-mu-plugin' ),
+		);
+
+		$broken = false;
+
+		echo '<table class="widefat striped"><tbody>';
+
+		foreach ( $keys as $label => list( $key, $type ) ) {
+			$verdict = '' === $key ? 'missing' : $this->key_verdict( $key, $type );
+			$broken  = $broken || in_array( $verdict, array( 'missing', 'invalid' ), true );
+
+			printf(
+				'<tr><td>%s</td><td><strong>%s</strong></td></tr>',
+				esc_html( $label ),
+				esc_html( $labels[ $verdict ] ?? $verdict )
+			);
+		}
+
+		echo '</tbody></table>';
+
+		if ( $broken ) {
+			printf(
+				'<p><strong>%s</strong> %s</p>',
+				esc_html__( 'Checkout will fail on this environment.', 'upsun-mu-plugin' ),
+				esc_html__( 'Card fields error at payment time and the express-checkout element is rejected on every cart page (HTTP 401). Configure valid Stripe TEST keys in the gateway settings (Stripe dashboard → test mode → API keys).', 'upsun-mu-plugin' )
+			);
+		}
+	}
+
+	/**
+	 * Probe one key against Stripe and cache the verdict.
+	 *
+	 * A publishable key is exercised the way stripe.js exercises it — a
+	 * tokens request carrying the key and nothing else. Stripe rejects a
+	 * dead key with 401; a live key answers 400 (no card supplied), which
+	 * is proof enough. A secret key is read-only probed via /v1/account.
+	 * Only 401 means invalid; any other answer from Stripe means the key
+	 * was accepted, and a transport failure is reported as unverified
+	 * rather than guessed at.
+	 *
+	 * @return string 'valid' | 'invalid' | 'unverified-disabled' | 'unverified-network'.
+	 */
+	private function key_verdict( string $key, string $type ): string {
+		/**
+		 * Filters whether the dashboard probes Stripe to verify the
+		 * configured test keys. Disable on environments whose network
+		 * policy forbids outbound calls from admin page loads; the panel
+		 * then reports the keys as unverified instead of probing.
+		 *
+		 * @param bool $validate Default true.
+		 */
+		if ( ! apply_filters( 'upsun_woocommerce_stripe_validate_keys', true ) ) {
+			return 'unverified-disabled';
+		}
+
+		$cache_key = 'upsun_stripe_key_' . md5( $key );
+		$cached    = get_site_transient( $cache_key );
+
+		if ( is_string( $cached ) && '' !== $cached ) {
+			return $cached;
+		}
+
+		if ( 'secret' === $type ) {
+			$response = wp_remote_get(
+				'https://api.stripe.com/v1/account',
+				array(
+					'timeout' => 5,
+					'headers' => array( 'Authorization' => 'Bearer ' . $key ),
+				)
+			);
+		} else {
+			$response = wp_remote_post(
+				'https://api.stripe.com/v1/tokens',
+				array(
+					'timeout' => 5,
+					'body'    => array( 'key' => $key ),
+				)
+			);
+		}
+
+		if ( is_wp_error( $response ) ) {
+			set_site_transient( $cache_key, 'unverified-network', self::RETRY_TTL );
+
+			return 'unverified-network';
+		}
+
+		$verdict = 401 === (int) wp_remote_retrieve_response_code( $response )
+			? 'invalid'
+			: 'valid';
+		set_site_transient( $cache_key, $verdict, self::VERDICT_TTL );
+
+		return $verdict;
 	}
 }

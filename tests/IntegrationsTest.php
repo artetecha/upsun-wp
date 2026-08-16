@@ -18,6 +18,18 @@ function is_account_page() {
 	return ! empty( $GLOBALS['upsun_test_is_account'] );
 }
 
+/**
+ * Define the WC_Stripe class marker at CALL time, not file-load time — a
+ * class declaration nested in a plain function only executes when the
+ * function runs, which lets test_labels_and_detection assert the class is
+ * absent before the Stripe-keys panel tests bring it into existence.
+ */
+function upsun_test_define_wc_stripe(): void {
+	if ( ! class_exists( 'WC_Stripe' ) ) {
+		class WC_Stripe {}
+	}
+}
+
 final class IntegrationsTest extends TestCase {
 
 	protected function setUp(): void {
@@ -140,5 +152,134 @@ final class IntegrationsTest extends TestCase {
 		// Neither target plugin exists in the test environment.
 		$this->assertFalse( $woocommerce->is_active() );
 		$this->assertFalse( $stripe->is_active() );
+	}
+
+	/* Stripe keys dashboard panel.
+	 *
+	 * ORDER-SENSITIVE: fake_wc_stripe() defines the WC_Stripe class for the
+	 * rest of the process, so every test below must run AFTER
+	 * test_labels_and_detection (which asserts the class is absent). PHPUnit
+	 * runs methods in declaration order and this suite does not randomize —
+	 * keep these at the bottom of the file.
+	 */
+
+	private function fake_wc_stripe(): void {
+		upsun_test_define_wc_stripe();
+	}
+
+	private function seed_test_mode_settings( string $pk = 'pk_test_dead', string $sk = 'sk_test_dead' ): void {
+		$GLOBALS['upsun_test_options']['woocommerce_stripe_settings'] = array(
+			'testmode'             => 'yes',
+			'test_publishable_key' => $pk,
+			'test_secret_key'      => $sk,
+		);
+	}
+
+	private function render_keys_panel(): string {
+		ob_start();
+		( new WooCommerceStripe() )->render_keys_panel();
+
+		return (string) ob_get_clean();
+	}
+
+	public function test_stripe_keys_panel_joins_the_dashboard(): void {
+		( new WooCommerceStripe() )->register();
+
+		$panels = apply_filters( 'upsun_dashboard_panels', array() );
+
+		$this->assertArrayHasKey( 'stripe-keys', $panels );
+		$this->assertIsCallable( $panels['stripe-keys']['render'] );
+	}
+
+	public function test_stripe_keys_panel_reports_keys_stripe_rejects(): void {
+		$this->fake_wc_stripe();
+		$this->seed_test_mode_settings();
+		// Stripe answers 401 for both probes: dead publishable, dead secret.
+		upsun_test_http_reset( array( array( 'code' => 401 ), array( 'code' => 401 ) ) );
+
+		$html = $this->render_keys_panel();
+
+		$this->assertStringContainsString( 'INVALID', $html );
+		$this->assertStringContainsString( 'Checkout will fail on this environment.', $html );
+
+		$requests = $GLOBALS['upsun_test_http']['requests'];
+		$this->assertCount( 2, $requests );
+		// Publishable key probes the way stripe.js does; secret via account.
+		$this->assertSame( 'https://api.stripe.com/v1/tokens', $requests[0]['url'] );
+		$this->assertSame( 'https://api.stripe.com/v1/account', $requests[1]['url'] );
+		$this->assertSame( 'Bearer sk_test_dead', $requests[1]['args']['headers']['Authorization'] );
+	}
+
+	public function test_stripe_keys_panel_reports_working_keys(): void {
+		$this->fake_wc_stripe();
+		$this->seed_test_mode_settings( 'pk_test_live', 'sk_test_live' );
+		// A valid publishable key answers 400 to a card-less tokens request
+		// (only a dead key gets 401); a valid secret answers 200.
+		upsun_test_http_reset( array( array( 'code' => 400 ), array( 'code' => 200 ) ) );
+
+		$html = $this->render_keys_panel();
+
+		$this->assertStringContainsString( 'valid', $html );
+		$this->assertStringNotContainsString( 'INVALID', $html );
+		$this->assertStringNotContainsString( 'Checkout will fail', $html );
+	}
+
+	public function test_stripe_keys_verdicts_are_cached(): void {
+		$this->fake_wc_stripe();
+		$this->seed_test_mode_settings( 'pk_test_cached', 'sk_test_cached' );
+		upsun_test_http_reset( array( array( 'code' => 401 ), array( 'code' => 401 ) ) );
+
+		$this->render_keys_panel();
+		$first = count( $GLOBALS['upsun_test_http']['requests'] );
+		$this->render_keys_panel();
+
+		$this->assertSame( 2, $first );
+		$this->assertCount( 2, $GLOBALS['upsun_test_http']['requests'], 'second render must serve verdicts from cache' );
+	}
+
+	public function test_stripe_keys_live_mode_is_never_probed(): void {
+		$this->fake_wc_stripe();
+		$GLOBALS['upsun_test_options']['woocommerce_stripe_settings'] = array( 'testmode' => 'no' );
+		upsun_test_http_reset();
+
+		$html = $this->render_keys_panel();
+
+		$this->assertStringContainsString( 'Live mode', $html );
+		$this->assertCount( 0, $GLOBALS['upsun_test_http']['requests'] );
+	}
+
+	public function test_stripe_keys_missing_keys_warn_without_probing(): void {
+		$this->fake_wc_stripe();
+		$this->seed_test_mode_settings( '', '' );
+		upsun_test_http_reset();
+
+		$html = $this->render_keys_panel();
+
+		$this->assertStringContainsString( 'missing', $html );
+		$this->assertStringContainsString( 'Checkout will fail on this environment.', $html );
+		$this->assertCount( 0, $GLOBALS['upsun_test_http']['requests'] );
+	}
+
+	public function test_stripe_keys_probing_can_be_disabled(): void {
+		$this->fake_wc_stripe();
+		$this->seed_test_mode_settings();
+		upsun_test_http_reset();
+		add_filter( 'upsun_woocommerce_stripe_validate_keys', '__return_false' );
+
+		$html = $this->render_keys_panel();
+
+		$this->assertStringContainsString( 'unverified (probing disabled)', $html );
+		$this->assertCount( 0, $GLOBALS['upsun_test_http']['requests'] );
+	}
+
+	public function test_stripe_keys_unreachable_stripe_is_reported_not_guessed(): void {
+		$this->fake_wc_stripe();
+		$this->seed_test_mode_settings( 'pk_test_x', 'sk_test_x' );
+		upsun_test_http_reset( array( array( 'error' => 'timed out' ), array( 'error' => 'timed out' ) ) );
+
+		$html = $this->render_keys_panel();
+
+		$this->assertStringContainsString( 'unverified (Stripe unreachable)', $html );
+		$this->assertStringNotContainsString( 'INVALID', $html );
 	}
 }
