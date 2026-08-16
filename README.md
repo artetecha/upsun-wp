@@ -129,7 +129,7 @@ the target was detected.
 | Integration | Target | Contributions |
 |---|---|---|
 | `woocommerce` | WooCommerce | Session/cart cookies as page-cache bypass patterns; cart/checkout/account pages as page-cache skips; webhook-delivery pause as a SafePreviews protection. |
-| `woocommerce-stripe` | WooCommerce Stripe gateway | Test mode forced at option-read time on previews as a SafePreviews protection (cloned live keys stay untouched and unused). |
+| `woocommerce-stripe` | WooCommerce Stripe gateway | Test mode forced at option-read time on previews as a SafePreviews protection (cloned live keys stay untouched and unused). Plus a "Stripe keys" dashboard panel: in test mode, both test keys are probed against Stripe (cached 12h, keyed on the key value) and reported per key — valid / INVALID / missing / unverified — with a warning that checkout will fail when a key is dead or absent; test keys that Stripe *rejects* leave the gateway available and silently broken, which the admin otherwise never shows. Live mode is reported, never probed. |
 | `wordfence` | Wordfence | Advisory: declares `wp-content/wflogs` as a writable-path requirement. |
 | `updraftplus` | UpdraftPlus | Advisory: declares `wp-content/updraft` as a writable-path requirement. |
 | `wp-rocket` | WP Rocket | Advisory: declares `wp-content/cache` and `wp-content/wp-rocket-config`; notes the `advanced-cache.php` root drop-in (not mountable — copy at build time). |
@@ -197,6 +197,7 @@ Module boot is deferred to `muplugins_loaded` priority 0, so **any mu-plugin** c
 | `upsun_cron_heartbeat_schedule` | `string` | `'hourly'` | WP-Cron schedule for the heartbeat event (staleness thresholds scale with it). |
 | `upsun_safe_previews_mail` | `string` | `'intercept'` | Preview mail policy: `intercept` (log, never send), `allow`, or `redirect:qa@example.com`. Malformed values fail safe to intercept. Complements (does not replace) the platform's own "Outgoing emails" toggle: Upsun blocks its SMTP proxy on previews by default, but that toggle never reaches external SMTP/API mailer plugins configured in the cloned data — `wp_mail` interception covers those too. The Preview safety status reports both layers. |
 | `upsun_woocommerce_stripe_test_mode` | `bool` | `true` | Stop forcing WooCommerce Stripe into test mode on previews. |
+| `upsun_woocommerce_stripe_validate_keys` | `bool` | `true` | Stop the "Stripe keys" dashboard panel probing Stripe to verify the configured test keys (for networks that forbid outbound calls from admin page loads); keys then report as unverified. |
 | `upsun_woocommerce_pause_webhooks` | `bool` | `true` | Stop pausing WooCommerce webhook deliveries on previews. |
 | `upsun_safe_previews_actions` | `array<string, {label, register, status}>` | 3 built-in protections | Add protections for your own integrations (CRMs, other gateways) or remove built-ins. `register` runs at `muplugins_loaded` on previews; `status` at render time. |
 | `upsun_safe_previews_boot_check` | `bool` | `false` | Fallback for projects that cannot edit their hooks: check the environment stamp on every boot and sanitize inline when it is stale. Prefer the post_deploy hook. |
