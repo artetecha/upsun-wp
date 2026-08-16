@@ -62,7 +62,10 @@
         Off-platform it <strong>fully no-ops</strong> — local dev and CI need no special-casing.
       </p>
       <ul class="badge-row" aria-label="Project facts">
-        <li class="badge badge-version">v1.0.0</li>
+        <!-- Fallback only: the deploy workflow overwrites this badge with the
+             latest git tag, so a release cannot leave it stale again (v1.0.1
+             shipped with no site change and this badge never noticed). -->
+        <li class="badge badge-version">v1.1.0</li>
         <li class="badge">MIT</li>
         <li class="badge">PHP 8.1+</li>
         <li class="badge">WordPress 6.0+</li>
