@@ -39,7 +39,13 @@ jobs:
         # never leave the site stale again.
         run: |
           version="$(git describe --tags --abbrev=0)"
-          sed -i "s|\(class="badge badge-version">\)v[^<]*|\1v${version}|" site/index.html
+          # Single-quoted sed program; the version is spliced in its own
+          # double-quoted segment. The first version of this line wrapped
+          # the whole program in double quotes, so the "s inside the HTML
+          # attribute ended the shell string, the space in the class name
+          # split the argument, and sed got a truncated program
+          # ("unterminated `s' command") — which failed the deploy.
+          sed -i 's|\(class="badge badge-version">\)v[^<]*|\1v'"${version}"'|' site/index.html
           grep -o 'class="badge badge-version">v[^<]*' site/index.html
 
       - uses: actions/configure-pages@v5
