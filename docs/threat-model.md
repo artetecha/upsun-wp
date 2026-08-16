@@ -185,6 +185,19 @@ of *this environment's own routes* (`CacheCheck::is_environment_url()`). The CLI
 equivalent has no such allowlist by design — the operator chooses the target, and
 they can already make requests from the container.
 
+**The Stripe-keys panel sends the test secret key to Stripe — and nowhere
+else.** The endpoints are hardcoded (`api.stripe.com`), never derived from
+input, so there is no SSRF surface; the keys come from the gateway's own
+option, and the credential travels only to its issuer — the API it exists to
+authenticate against — which adds no new place a secret can leak to. Live
+keys are never sent: probing is gated on the gateway being in test mode, and
+live mode is reported without a request. The probe runs on a
+`manage_options`-gated admin render, its frequency is bounded by a verdict
+cache keyed on the key value (12 hours; 5 minutes after a transport
+failure), and `upsun_woocommerce_stripe_validate_keys` turns probing off
+entirely for networks whose policy forbids outbound calls from admin page
+loads — the panel then reports the keys as unverified rather than guessing.
+
 **`wp upsun cache-check --auth=user:pass` puts credentials in the process
 arguments,** where anything reading `/proc` or `ps` on the container can see
 them, and they will be sent to whatever host the operator named. Prefer checking
